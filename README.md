@@ -1,4 +1,4 @@
-# 🖥️ Pintos Project 2 · Threads
+# 🖥️ Pintos Project 2 · User Programs
 
 KAIST Pintos의 Project 2(User Programs)을 팀 단위로 구현하는 프로젝트입니다.
 
