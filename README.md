@@ -1,10 +1,10 @@
-# 🖥️ Pintos Project 1 · Threads
+# 🖥️ Pintos Project 2 · Threads
 
-KAIST Pintos의 Project 1(Threads)을 팀 단위로 구현하는 프로젝트입니다.
+KAIST Pintos의 Project 2(User Programs)을 팀 단위로 구현하는 프로젝트입니다.
 
 ## 🎯 프로젝트 목표
 
-- Project 1의 모든 필수 요구사항 구현
+- Project 2의 모든 필수 요구사항 구현
 - 최종 `main` 브랜치에서 필수 테스트 통과
 - 구현 과정과 트러블슈팅을 정리하여 주간 공유 발표 진행
 
