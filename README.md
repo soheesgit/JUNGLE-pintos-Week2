@@ -13,7 +13,7 @@ KAIST Pintos의 Project 1(Threads)을 팀 단위로 구현하는 프로젝트입
 | 프로필 | 이름 | GitHub |
 |:---:|:---:|:---:|
 | <img src="https://avatars.githubusercontent.com/u/315711857?v=4" width="80" height="80"> | 허준강 | [@HeoJunekang](https://github.com/HeoJunekang) |
-| <img src="https://github.com/account" width="80" height="80"> | 이강현 | [@BurningWings](https://github.com/BurningWings) |
+| <img src="https://avatars.githubusercontent.com/u/233964976?s=400&u=d62ec95e129ab33414abb214c255d3caab286be3&v=4" width="80" height="80"> | 이강현 | [@BurningWings](https://github.com/BurningWings) |
 | <img src="https://github.com/soheesgit.png" width="80" height="80"> | 문소희 | [@soheesgit](https://github.com/soheesgit) |
 ## 🛠️ 개발 환경
 
