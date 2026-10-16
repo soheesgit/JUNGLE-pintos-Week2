@@ -335,10 +335,15 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	char *now_pointer, *save_pointer;
+	
+	//  스트링을 토큰화를해서 앞에 파일네임을 넘겨줘야함! grap foo bar
 	/* Open executable file. */
-	file = filesys_open (file_name);
+
+	char *program_name = strtok_r(file_name, " ", &save_pointer);
+	file = filesys_open (program_name);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", program_name);
 		goto done;
 	}
 
@@ -366,7 +371,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		if (file_ofs < 0 || file_ofs > file_length (file))
 			goto done;
 		file_seek (file, file_ofs); // 파일을 읽을 위치를 변경한다.
-
 		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)  
 			goto done;
 		file_ofs += sizeof phdr; // 파일의 오프셋(크기)가 올라간다.
@@ -415,39 +419,30 @@ load (const char *file_name, struct intr_frame *if_) {
 	// 파일의 시작부터 파일의 끝을 만날때까지
 	
 
-	if (!setup_stack (if_))
-		goto done;
-	// 만약 스페이스바를 만났다? 스택에 넣음.
+	if (setup_stack(if_)) goto done;
 
-	// 준강: 인자로 받은 file_name 이 프로그램 이름으로?? 
-	// 파일에 메서드로 foo와 bar를 넣는다.
-	// strtok_r 이걸 통해 끊는다.
-	/*
+	char **double_pointer;
 	
-   Example usage:
-
-   char s[] = "  String to  tokenize. ";
-   char *token, *save_ptr;
-
-   for (token = strtok_r (s, " ", &save_ptr); token != NULL;
-   token = strtok_r (NULL, " ", &save_ptr))
-   printf ("'%s'\n", token);
-
-
-   for (token = strtok_r (파일의위치?s, " ", &파일하나포인터); 스택에넣기;
-
-   */
+	int size = 0;
+	for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+		size++;
+		// 이중포인터 배열을 만들어.
+		// 근데 이걸 스택에게 어떻게 넘기느냐?
+		*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
+		double_pointer++; // 다음 포인터로 넘어감
+	}
 	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
-	즉, process_exec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
+	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
 
-
+	double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
+	
+	// 스택에 넣는다
+	for (int i = 0; i < size; i++) {
+		if_->rsp = double_pointer; 
+		if_->rsp = (if_->rsp) - sizeof(double_pointer);
+	}
 		/* Start address. */
 	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-
 	success = true;
 
 done:
