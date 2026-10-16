@@ -158,7 +158,7 @@ error:
 	thread_exit ();
 }
 
-/* Switch the current execution context to the f_name.
+/* Switch the current execution context to the f_name. //컨텍스트 스위칭
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
@@ -169,8 +169,8 @@ process_exec (void *f_name) {
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
 	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
+	_if.ds = _if.es = _if.ss = SEL_UDSEG; /* User data selector. */
+	_if.cs = SEL_UCSEG;						/* User code selector. */
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
@@ -248,13 +248,15 @@ process_cleanup (void) {
 
 /* Sets up the CPU for running user code in the nest thread.
  * This function is called on every context switch. */
+//가상주소 activate, 
 void
 process_activate (struct thread *next) {
 	/* Activate thread's page tables. */
 	pml4_activate (next->pml4);
 
 	/* Set thread's kernel stack for use in processing interrupts. */
-	tss_update (next);
+	//인터럽트 처리에 사용할 스레드의 커널 스택을 설정한다.
+	tss_update (next); //다음 페이지로 넘김?
 }
 
 /* We load ELF binaries.  The following definitions are taken
@@ -330,7 +332,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	int i;
 
 	/* Allocate and activate page directory. */
-	t->pml4 = pml4_create ();
+	t->pml4 = pml4_create (); //가상주소 시작점
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
