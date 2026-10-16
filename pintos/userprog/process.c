@@ -162,7 +162,16 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) { //문제가 지금 2개로 못나누고 있다. 
+	//이위치에 나누는거 만들자
 	char *file_name = f_name;
+	char fiust = strtok_r (NULL, " ", &file_name); //지금 앞에있는 것만 가져오는거 아닌가 지금
+	// *file_name = foo bar
+	//for bar 집어 변수 각각 
+	//각각 만든 변수르 스택에 넣는 
+	//for 문을 사용하여 one two thre 를 사옹하요 conf 를 사용하여 0일때 one 1일때 two 하는 식으로 개발 ㄱㄱ
+	// 
+	
+	//fiust[0] 이 실행파일 [1] 부터 매서드 인자값
 	bool success;
 
 	/* We cannot use the intr_frame in the thread structure.
@@ -174,18 +183,18 @@ process_exec (void *f_name) { //문제가 지금 2개로 못나누고 있다.
 	_if.eflags = FLAG_IF | FLAG_MBS; //or연산
 
 	/* We first kill the current context */
-	process_cleanup ();
+	process_cleanup (); //현재 스레드가 사용하던걸 다 정리해버리는거
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (fiust, &_if); //실행중인 파일을 적제하는거
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	palloc_free_page (fiust); //할당받은 메모리 페이지를 free 시키는거
 	if (!success)
 		return -1;
 
 	/* Start switched process. */
-	do_iret (&_if);
+	do_iret (&_if); //CPU 원위치
 	NOT_REACHED ();
 }
 

@@ -101,18 +101,19 @@ memchr (const void *block_, int ch_, size_t size) {
    then returns a pointer to the null terminator at the end of
    STRING. */
 char *
-strchr (const char *string, int c_) {
-	char c = c_;
+strchr (const char *string, int c_) { //나눌 기준 , 현재 문자 (아스키코드로 받음)
+	char c = c_;//아스키 코드를 문자열로 변환
 
 	ASSERT (string);
 
-	for (;;)
-		if (*string == c)
-			return (char *) string;
-		else if (*string == '\0')
+	for (;;)//무한 반복 while(TRUE) 안쓴이유
+		if (*string == c) //나눌 기준에 문자가 있다면
+		// " " == g
+			return (char *) string; //그 문자의 *주소*를 반환 즉 문자 부터 시작한다고 생각해도 됨
+		else if (*string == '\0') // \0 도착하면 NULL 반환
 			return NULL;
 		else
-			string++;
+			string++; //string 다음은 \0 임
 }
 
 /* Returns the length of the initial substring of STRING that
@@ -216,9 +217,8 @@ outputs:
 'tokenize.'
 */
 char *
-strtok_r (char *s, const char *delimiters, char **save_ptr) {
+strtok_r (char *s, const char *delimiters, char **save_ptr) { //s = 문자열(Null 상태로 하면 나중에 원본 에서 받음)(만약 NULL 이면 나눴던 부분부터 시작) , 나눌 기준 , 기준으로 나눴을때 가지고 있을 문자열 (나눴을때 뒤에 나머지)
 	char *token;
-
 	ASSERT (delimiters != NULL);
 	ASSERT (save_ptr != NULL);
 
@@ -229,21 +229,22 @@ strtok_r (char *s, const char *delimiters, char **save_ptr) {
 	ASSERT (s != NULL);
 
 	/* Skip any DELIMITERS at our current position. */
-	while (strchr (delimiters, *s) != NULL) {
+	while (strchr (delimiters, *s) != NULL) { //NULL을 반환 할때까지 즉 \0 까지 갈때까지 반복
+		//1번 반복해서 실행하고 s++해서 다시 시작
 		/* strchr() will always return nonnull if we're searching
 		   for a null byte, because every string contains a null
 		   byte (at the end). */
-		if (*s == '\0') {
-			*save_ptr = s;
-			return NULL;
+		if (*s == '\0') { //만약 s가 \0 이라면 
+			*save_ptr = s; //save_ptr 을 \0 으로 만들기?
+			return NULL; // NULL 반환 즉 계속 반복한다는거 
 		}
 
-		s++;
+		s++; //아니라면 s++ 해서 다시 반복
 	}
 
 	/* Skip any non-DELIMITERS up to the end of the string. */
 	token = s;
-	while (strchr (delimiters, *s) == NULL)
+	while (strchr (delimiters, *s) == NULL) //NULL일때까지 즉 위에꼐 끝나면 시작?
 		s++;
 	if (*s != '\0') {
 		*s = '\0';
