@@ -419,8 +419,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	// 파일의 시작부터 파일의 끝을 만날때까지
 	
 
-	if (setup_stack(if_)) goto done;
-
 	char **double_pointer;
 	
 	int size = 0;
@@ -438,9 +436,18 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 	// 스택에 넣는다
 	for (int i = 0; i < size; i++) {
-		if_->rsp = double_pointer; 
 		if_->rsp = (if_->rsp) - sizeof(double_pointer);
+		if_->rsp = double_pointer;
+		double_pointer--;
 	}
+
+	// argv 값을 넣어준다.
+	if_->rsp = (if_->rsp) - sizeof(double_pointer);
+	if_->rsp = size;
+
+
+	if (setup_stack(if_)) goto done;
+
 		/* Start address. */
 	if_->rip = ehdr.e_entry;
 	success = true;
