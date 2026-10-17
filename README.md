@@ -1,10 +1,10 @@
-# 🖥️ Pintos Project 1 · Threads
+# 🖥️ Pintos Project 2 · User Programs
 
-KAIST Pintos의 Project 1(Threads)을 팀 단위로 구현하는 프로젝트입니다.
+KAIST Pintos의 Project 2(User Programs)을 팀 단위로 구현하는 프로젝트입니다.
 
 ## 🎯 프로젝트 목표
 
-- Project 1의 모든 필수 요구사항 구현
+- Project 2의 모든 필수 요구사항 구현
 - 최종 `main` 브랜치에서 필수 테스트 통과
 - 구현 과정과 트러블슈팅을 정리하여 주간 공유 발표 진행
 
@@ -12,8 +12,8 @@ KAIST Pintos의 Project 1(Threads)을 팀 단위로 구현하는 프로젝트입
 
 | 프로필 | 이름 | GitHub |
 |:---:|:---:|:---:|
-| <img src="https://github.com/kylekim0868-cpu.png" width="80" height="80"> | 김영민 | [@kylekim0868-cpu](https://github.com/kylekim0868-cpu) |
-| <img src="https://github.com/Leo-2894.png" width="80" height="80"> | 김도영 | [@Leo-2894](https://github.com/Leo-2894) |
+| <img src="https://avatars.githubusercontent.com/u/315711857?v=4" width="80" height="80"> | 허준강 | [@HeoJunekang](https://github.com/HeoJunekang) |
+| <img src="https://avatars.githubusercontent.com/u/233964976?s=400&u=d62ec95e129ab33414abb214c255d3caab286be3&v=4" width="80" height="80"> | 이강현 | [@BurningWings](https://github.com/BurningWings) |
 | <img src="https://github.com/soheesgit.png" width="80" height="80"> | 문소희 | [@soheesgit](https://github.com/soheesgit) |
 ## 🛠️ 개발 환경
 
