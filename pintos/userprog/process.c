@@ -215,12 +215,14 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	thread_exit();
+ 	// 종료를 해야한다.
 	process_cleanup ();
 }
 
 /* Free the current process's resources. */
 static void
-process_cleanup (void) {
+process_cleanup (void) { // 그냥 PML4를 destroy 하는 함수
 	struct thread *curr = thread_current ();
 
 #ifdef VM

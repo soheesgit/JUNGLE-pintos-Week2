@@ -37,6 +37,11 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+static void exit(uint64_t status){
+	printf("%s: exit(%d)\n", status);
+	process_exit();
+}
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
@@ -45,30 +50,26 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	switch (f->R.rax)
 	{
 	case SYS_WRITE:
-		// f->R.rdi 이게 argc의 값. argc는 개수이다.
+		// (int fd // rdx, const void *buffer // rsi, unsigned size)
 		// f->R.rsi; 이게 배열의 시작주소이다.
-		putbuf(f->R.rsi, f->R.rdi); // 버퍼에 쓴다.
+		// f->R.rdx 이게 출력할 바이트 수
+
+		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
+
+		putbuf(f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
 		break;
+	case SYS_EXIT:
+	// 	종료
+		exit(f->R.rdi);
+		break;	
 	}
 
-	// 준강강의: 1. rdi가 잘 넘어갔는가? 2. rdi
-	/*
-	msg()를 위해 시스템 콜을 출력해야함.
-	intr_frame -> 사실상 기존 유저모드가 저장되는 공간을 전달해준것임. 끝나면 다시 intr_frame로 전환을 해주는건가?
-
-	1. 유저영역에서 메시지를 출력해야함.
-	2. 유저가 시스템 콜 요청
-	-> systemcall에 포인터를 보내는데 버퍼를 넣어주고 주소 u를 보내준다. 
-		-> 주소u: 출력할 데이터를 넣은 주소 공간을 보내줌.
-		-> MPL4를 가져온 다음에 커널 모드에서 유저 모드로 출력(write)를 해줌.
-		-> 시스템콜 종료.
-	*/
-
-	// TODO: Your implementation goes here.
-	printf ("system call!\n");
+	// __attribute__
 	thread_exit ();
 }
-
+// exit을 하면 -> msg가 떠야함. 
+// 그 다음에 프로세스 exit 을 호출하는 코드를 해야함.
+// 그렇게 두줄이 들어가는 코드를 만들어러ㅏㅏ.
 
 	// 핸들러 발생! 그러면 어떻게해야되냐??
 
