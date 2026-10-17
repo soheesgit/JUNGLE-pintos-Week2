@@ -531,7 +531,7 @@ static bool install_page (void *upage, void *kpage, bool writable);
  * 성공하면 true를 반환하고,
  * 메모리 할당 오류 또는 디스크 읽기 오류가 발생하면
  * false를 반환한다. */
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
