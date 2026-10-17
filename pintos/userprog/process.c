@@ -161,7 +161,7 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) { // 이거 구현해야됨
+process_exec (void *f_name) {
 	char *file_name = f_name; // 파일 이름
 	bool success; // 성공 여부
 
@@ -173,7 +173,7 @@ process_exec (void *f_name) { // 이거 구현해야됨
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup (); // 현재 프로세슬르 지운다
+	process_cleanup (); // 현재 프로세스를 지운다
 
 	/* And then load the binary */
 	success = load (file_name, &_if); // 바이너리를 로드한다.
@@ -215,12 +215,14 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	thread_exit();
+ 	// 종료를 해야한다.
 	process_cleanup ();
 }
 
 /* Free the current process's resources. */
 static void
-process_cleanup (void) {
+process_cleanup (void) { // 그냥 PML4를 destroy 하는 함수
 	struct thread *curr = thread_current ();
 
 #ifdef VM
@@ -530,7 +532,7 @@ static bool install_page (void *upage, void *kpage, bool writable);
  * 성공하면 true를 반환하고,
  * 메모리 할당 오류 또는 디스크 읽기 오류가 발생하면
  * false를 반환한다. */
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
