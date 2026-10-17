@@ -45,10 +45,10 @@ process_create_initd (const char *file_name) {
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page (0);
+	fn_copy = palloc_get_page (0); // 메모리 페이지 할당
 	if (fn_copy == NULL)
 		return TID_ERROR;
-	strlcpy (fn_copy, file_name, PGSIZE);
+	strlcpy (fn_copy, file_name, PGSIZE); // 문자열 전체를 복사한다. 즉 공백을 포함한 문자열이 fn_copy에 저장된다.
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -161,31 +161,39 @@ error:
 /* Switch the current execution context to the f_name. //컨텍스트 스위칭
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) {
-	char *file_name = f_name;
-	bool success;
+process_exec (void *f_name) { // 이거 구현해야됨
+	char *file_name = f_name; // 파일 이름
+	bool success; // 성공 여부
 
+<<<<<<< HEAD
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG; /* User data selector. */
 	_if.cs = SEL_UCSEG;						/* User code selector. */
+=======
+	/* 우리는 쓰레드 구조체에서 intr_frame을 사용할 수 없다.
+	 * 왜냐면 현재 쓰레드가 다시 스케쥴링될 때, 실행 정보가 해당 멤버에 저장이 된다. */ 
+	struct intr_frame _if; 
+	_if.ds = _if.es = _if.ss = SEL_UDSEG;
+	_if.cs = SEL_UCSEG;
+>>>>>>> 60b2602c01c9ee9f361197fdbeed466c0c00211c
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup ();
+	process_cleanup (); // 현재 프로세슬르 지운다
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (file_name, &_if); // 바이너리를 로드한다.
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	palloc_free_page (file_name); // 실패하면 초기화
 	if (!success)
 		return -1;
 
 	/* Start switched process. */
-	do_iret (&_if);
+	do_iret (&_if); // 스위치 시작!!!
 	NOT_REACHED ();
 }
 
@@ -337,14 +345,21 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	char *now_pointer, *save_pointer;
+	
+	//  스트링을 토큰화를해서 앞에 파일네임을 넘겨줘야함! grap foo bar
 	/* Open executable file. */
-	file = filesys_open (file_name);
+
+	char *program_name = strtok_r(file_name, " ", &save_pointer);
+	file = filesys_open (program_name);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", program_name);
 		goto done;
 	}
 
 	/* Read and verify executable header. */
+	// 파일, 메모리 주소, 바이트 수를 통해서 읽어온다.
+
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -356,18 +371,19 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	// 프로그램의 헤더를 읽고 메모리에 적재
+	// 헤더파일을 읽는 이유: ELF 헤더에는 실행 파일을 해석하는데 필요한 기본 정보가 들어있다.
 	/* Read program headers. */
-	file_ofs = ehdr.e_phoff;
-	for (i = 0; i < ehdr.e_phnum; i++) {
+	file_ofs = ehdr.e_phoff; // 프로그램 헤더 테이블이 파일의 어느 위치에 있는지
+	for (i = 0; i < ehdr.e_phnum; i++) { // 프로그램의 헤더가 몇개인지. 
 		struct Phdr phdr;
 
 		if (file_ofs < 0 || file_ofs > file_length (file))
 			goto done;
-		file_seek (file, file_ofs);
-
-		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+		file_seek (file, file_ofs); // 파일을 읽을 위치를 변경한다.
+		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)  
 			goto done;
-		file_ofs += sizeof phdr;
+		file_ofs += sizeof phdr; // 파일의 오프셋(크기)가 올라간다.
 		switch (phdr.p_type) {
 			case PT_NULL:
 			case PT_NOTE:
@@ -409,16 +425,41 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
-	/* Set up stack. */
-	if (!setup_stack (if_))
-		goto done;
+	// 파일의 시작 선언
+	// 파일의 시작부터 파일의 끝을 만날때까지
+	
 
-	/* Start address. */
+	char **double_pointer;
+	
+	int size = 0;
+	for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+		size++;
+		// 이중포인터 배열을 만들어.
+		// 근데 이걸 스택에게 어떻게 넘기느냐?
+		*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
+		double_pointer++; // 다음 포인터로 넘어감
+	}
+	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
+	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
+
+	double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
+	
+	// 스택에 넣는다
+	for (int i = 0; i < size; i++) {
+		if_->rsp = (if_->rsp) - sizeof(double_pointer);
+		if_->rsp = double_pointer;
+		double_pointer--;
+	}
+
+	// argv 값을 넣어준다.
+	if_->rsp = (if_->rsp) - sizeof(double_pointer);
+	if_->rsp = size;
+
+
+	if (setup_stack(if_)) goto done;
+
+		/* Start address. */
 	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
 	success = true;
 
 done:
@@ -480,21 +521,25 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 /* load() helpers. */
 static bool install_page (void *upage, void *kpage, bool writable);
 
-/* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
+/* FILE의 오프셋 OFS에서 시작하는 세그먼트를
+ * 가상 주소 UPAGE에 로드한다.
  *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
+ * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리를
+ * 다음과 같이 초기화한다.
  *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+ * - UPAGE에서 시작하는 READ_BYTES 바이트는
+ *   FILE의 오프셋 OFS부터 읽어와야 한다.
  *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
+ * - UPAGE + READ_BYTES에서 시작하는 ZERO_BYTES 바이트는
+ *   0으로 초기화해야 한다.
  *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
-static bool
+ * 이 함수가 초기화한 페이지들은 WRITABLE이 true이면
+ * 사용자 프로세스가 쓸 수 있어야 하며,
+ * 그렇지 않으면 읽기 전용이어야 한다.
+ *
+ * 성공하면 true를 반환하고,
+ * 메모리 할당 오류 또는 디스크 읽기 오류가 발생하면
+ * false를 반환한다. */
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
