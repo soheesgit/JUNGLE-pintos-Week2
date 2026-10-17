@@ -165,20 +165,11 @@ process_exec (void *f_name) { // 이거 구현해야됨
 	char *file_name = f_name; // 파일 이름
 	bool success; // 성공 여부
 
-<<<<<<< HEAD
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
-	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG; /* User data selector. */
-	_if.cs = SEL_UCSEG;						/* User code selector. */
-=======
 	/* 우리는 쓰레드 구조체에서 intr_frame을 사용할 수 없다.
 	 * 왜냐면 현재 쓰레드가 다시 스케쥴링될 때, 실행 정보가 해당 멤버에 저장이 된다. */ 
 	struct intr_frame _if; 
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
->>>>>>> 60b2602c01c9ee9f361197fdbeed466c0c00211c
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
