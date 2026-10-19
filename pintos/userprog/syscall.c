@@ -41,6 +41,9 @@ static void exit(uint64_t status){
 	printf("%s: exit(%d)\n", status);
 	process_exit();
 }
+static void open(const char *name){
+
+}
 
 /* The main system call interface */
 void
@@ -62,7 +65,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	종료
 		exit(f->R.rdi);
 		break;	
+	case SYS_HALT: //핀토스 off 시키기
+		power_off();
+		break;
+	case SYS_OPEN:
+		open();
+		break;
 	}
+	
 
 	// __attribute__
 	thread_exit ();

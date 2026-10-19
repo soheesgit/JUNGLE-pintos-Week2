@@ -1,6 +1,7 @@
 #include <syscall.h>
 #include <stdint.h>
 #include "../syscall-nr.h"
+#include "threads/thread.h"
 
 __attribute__((always_inline))
 static __inline int64_t syscall (uint64_t num_, uint64_t a1_, uint64_t a2_,
@@ -107,6 +108,9 @@ remove (const char *file) {
 
 int
 open (const char *file) {
+	// static int fd_num = 2; //fd 넘버 배열하기 | 한번만 실행함
+	struct thread *curr = thread_current(); //현재 스레드
+	//기능
 	return syscall1 (SYS_OPEN, file);
 }
 
