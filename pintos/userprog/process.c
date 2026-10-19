@@ -355,7 +355,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	//  스트링을 토큰화를해서 앞에 파일네임을 넘겨줘야함! grap foo bar
 	/* Open executable file. */
 
-	char *program_name = strtok_r(file_name, " ", &save_pointer);
+	char *fn_copy = palloc_get_page (0); // 메모리 페이지 할당
+	strlcpy (fn_copy, file_name, PGSIZE);
+	char *program_name = strtok_r(fn_copy, " ", &save_pointer);
 	file = filesys_open (program_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", program_name);
@@ -430,38 +432,76 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
+	setup_stack(if_);
+
 	// 파일의 시작 선언
 	// 파일의 시작부터 파일의 끝을 만날때까지
 	
-
-	char **double_pointer;
-	
+	char *fn_copy2 = palloc_get_page (0); // 메모리 페이지 할당
 	int size = 0;
-	for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
-		size++;
-		// 이중포인터 배열을 만들어.
-		// 근데 이걸 스택에게 어떻게 넘기느냐?
-		*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
-		double_pointer++; // 다음 포인터로 넘어감
-	}
-	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
-	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
-
-	double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
 	
-	// 스택에 넣는다
-	for (int i = 0; i < size; i++) {
-		if_->rsp = (if_->rsp) - sizeof(double_pointer);
-		if_->rsp = double_pointer;
-		double_pointer--;
+	char **double_pointer = palloc_get_page(0);
+
+	// 원본 문자열의 길이를 반환함
+	strlcpy (fn_copy2, file_name, PGSIZE);
+
+	for (now_pointer = strtok_r(fn_copy2, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+		/*
+		새로운값을 할당한다
+		char now_data = malloc(sizeof(strlen(now_pointer)) + 1);
+		그 이후 문자열을 malloc된 값에 넣는다.
+		strlcpy(now_data, now_pointer, strlen(now_pointer) + 1);
+
+		malloc()으로 확보한 공간은 커널 측 메모리입니다.
+		사용자 프로그램이 사용할 문자열은 사용자 스택에도 존재해야합니다.
+		malloc이 아니라 memcpy를 통해 복사해줍니다.
+		*/
+
+		// TODO: 거꾸로 넣도록 고치기
+		size++;
+		int len = strlen(now_pointer) + 1; // 문자열의 길이를 추출한다.
+		if_->rsp -= len;  // 스택의 높이를 문자열의 길이만큼 내려준다.
+		memcpy((void *)if_->rsp, now_pointer, len); // 스택의 주소에 now_pointer의 값을 len만큼 넘겨준다.
+
+		*double_pointer = now_pointer; 
+		double_pointer++;
 	}
 
-	// argv 값을 넣어준다.
-	if_->rsp = (if_->rsp) - sizeof(double_pointer);
-	if_->rsp = size;
 
+	// 스택의 argv 배열에 값을 넣는 for문
+	for (int i = 0; i < size; i++) {
+		if_->rsp -= 8;
+		memcpy((void *)if_->rsp, --double_pointer, 8);
+	}
 
-	if (setup_stack(if_)) goto done;
+	// TODO: 스택에 argc값을 넣는 코드 필요.
+
+	
+	// int size = 0;
+	// for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+	// 	size++;
+	// 	// 이중포인터 배열을 만들어.
+	// 	// 근데 이걸 스택에게 어떻게 넘기느냐?
+	// 	*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
+	// 	double_pointer++; // 다음 포인터로 넘어감
+	// }
+	// /*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
+	// 즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
+
+	// double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
+	
+	// // 스택에 넣는다
+	// for (int i = 0; i < size; i++) {
+	// 	if_->rsp = (if_->rsp) - sizeof(double_pointer);
+	// 	if_->rsp = double_pointer;
+	// 	double_pointer--;
+	// }
+
+	// // argv 값을 넣어준다.
+	// if_->rsp = (if_->rsp) - sizeof(double_pointer);
+	// if_->rsp = size;
+	
+
 
 		/* Start address. */
 	if_->rip = ehdr.e_entry;
