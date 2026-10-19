@@ -40,20 +40,33 @@ process_init (void) {
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t
 process_create_initd (const char *file_name) {
-	char *fn_copy;
+	char *fn_copy, *temp;
 	tid_t tid;
+	char *save_ptr;
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
 	fn_copy = palloc_get_page (0); // 메모리 페이지 할당
+	temp = palloc_get_page (0); // 메모리 페이지 할당
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE); // 문자열 전체를 복사한다. 즉 공백을 포함한 문자열이 fn_copy에 저장된다.
+	strlcpy (temp, file_name, PGSIZE); // 문자열 전체를 복사한다. 쪼개기 위한 일회성 복사이다.
+	
+	
+	// file_name 안에는 문자열 전체가 들어가있으므로, file_name에서 프로그램 이름만 파싱함
+	// file_name을 그대로 사용하지 않는 이유: const로 선언되었기 때문에 file_name은 손상되면 안됨.
+	// fn_copy를 사용하지 않는 이유: thread_create에 fn_copy를 넘겨야 하기 떄문에 fn_copy의 값도 손상되면 안됨.
+
+	char *program_name = strtok_r(temp, " ", &save_ptr); 
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (program_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+
+	// temp 는 임시로 만든 값이고, 토큰화에 사용을 했으며 현재 이용이 끝남. free를 해주지 않으면 메모리 누수가 발생함
+	palloc_free_page(temp);
 	return tid;
 }
 
@@ -215,8 +228,8 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
-	thread_exit();
- 	// 종료를 해야한다.
+
+	// 종료를 해야한다.
 	process_cleanup ();
 }
 
