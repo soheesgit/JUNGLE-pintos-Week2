@@ -41,19 +41,28 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
+	char *temp;
 	tid_t tid;
-
+	char *save_ptr = NULL;
+	
 	/* Make a copy of FILE_NAME.
-	 * Otherwise there's a race between the caller and load(). */
+	 *그렇지 않으면 호출자와 load() 사이에 경쟁이 발생합니다. */
 	fn_copy = palloc_get_page (0); // 메모리 페이지 할당
+	temp = palloc_get_page (0);
+	
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE); // 문자열 전체를 복사한다. 즉 공백을 포함한 문자열이 fn_copy에 저장된다.
+	strlcpy (temp, file_name, PGSIZE);
+	char *program_name  = strtok_r(temp, " ", &save_ptr);
+	
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (program_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+		
+	palloc_free_page(temp);
 	return tid;
 }
 
@@ -161,7 +170,7 @@ error:
 /* Switch the current execution context to the f_name. //컨텍스트 스위칭
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) { // 이거 구현해야됨
+process_exec (void *f_name) {
 	char *file_name = f_name; // 파일 이름
 	bool success; // 성공 여부
 
@@ -173,7 +182,7 @@ process_exec (void *f_name) { // 이거 구현해야됨
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup (); // 현재 프로세슬르 지운다
+	process_cleanup (); // 현재 프로세스를 지운다
 
 	/* And then load the binary */
 	success = load (file_name, &_if); // 바이너리를 로드한다.
@@ -210,17 +219,21 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
+	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
+	 * TODO: 여기서 프로세스 리소스 정리 과정을 구현하는 것을 권장합니다. */
+	//어떤 정보들을 정리해야하나->현재 프로세스에서 관리하는 정보들(메모리, 열린파일, 프로세스 정보..)
 
+
+	//thread_exit(); //?여기서는 process_exit을 출력함
+ 	// 종료를 해야한다.
 	process_cleanup ();
 }
 
 /* Free the current process's resources. */
 static void
-process_cleanup (void) {
+process_cleanup (void) { // 그냥 PML4를 destroy 하는 함수
 	struct thread *curr = thread_current ();
 
 #ifdef VM
@@ -418,17 +431,20 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	// 파일의 시작 선언
 	// 파일의 시작부터 파일의 끝을 만날때까지
-	
+	if (setup_stack(if_)) goto done;
 
 	char **double_pointer;
-	
-	int size = 0;
-	for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
-		size++;
-		// 이중포인터 배열을 만들어.
-		// 근데 이걸 스택에게 어떻게 넘기느냐?
-		*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
+	char *fn_copy2 = palloc_get_page (0);
+	int *size =	malloc(sizeof(int *));
+	*size = 0;
+
+	strlcpy (fn_copy2, file_name, PGSIZE);
+	for (now_pointer = strtok_r(fn_copy2, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+		
+		*double_pointer = malloc(sizeof(*now_pointer)); // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
+		strlcpy (*double_pointer, now_pointer, sizeof(*now_pointer));
 		double_pointer++; // 다음 포인터로 넘어감
+		*size++;
 	}
 	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
 	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
@@ -438,19 +454,19 @@ load (const char *file_name, struct intr_frame *if_) {
 	// 스택에 넣는다
 	for (int i = 0; i < size; i++) {
 		if_->rsp = (if_->rsp) - sizeof(double_pointer);
-		if_->rsp = double_pointer;
+		*(char **)if_->rsp = double_pointer; 
 		double_pointer--;
 	}
+	double_pointer++;
+	//double_pointer는 처음것을 가리키고 잇음
 
 	// argv 값을 넣어준다.
-	if_->rsp = (if_->rsp) - sizeof(double_pointer);
-	if_->rsp = size;
+	if_->rsp = (if_->rsp) - sizeof(sizeof(int *));
+	*(int *)if_->rsp = size; //size걊을 마지막에 써줌
 
-
-	if (setup_stack(if_)) goto done;
 
 		/* Start address. */
-	if_->rip = ehdr.e_entry;
+	if_->rip = ehdr.e_entry; //다음에 실행해야할 명령어 위치
 	success = true;
 
 done:
