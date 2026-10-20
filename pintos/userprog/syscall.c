@@ -38,8 +38,8 @@ syscall_init (void) {
 }
 
 static void exit(uint64_t status){
-	printf("%s: exit(%d)\n", status);
-	process_exit();
+	printf("%s: exit(%d)\n", thread_current() -> name, (int) status);
+	thread_exit();
 }
 
 /* The main system call interface */
@@ -56,7 +56,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
 
-		putbuf(f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
 		break;
 	case SYS_EXIT:
 	// 	종료
@@ -65,7 +66,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	}
 
 	// __attribute__
-	thread_exit ();
+	// thread_exit ();
 }
 // exit을 하면 -> msg가 떠야함. 
 // 그 다음에 프로세스 exit 을 호출하는 코드를 해야함.
