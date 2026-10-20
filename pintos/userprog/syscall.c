@@ -81,7 +81,7 @@ return -1;
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	
+	struct thread *curr = thread_current();		 //나의 쓰레드 가져오기
 	// 레지스터의 rax값에 요청되는 상태를 저장한다.
 	switch (f->R.rax)
 	{
@@ -95,7 +95,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CLOSE:
 		break;
 	case SYS_OPEN:
-		struct thread *curr = thread_current();
 		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
 			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
 				exit(-1); //잘못된 주소면 프로세스 종료
@@ -125,7 +124,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			putbuf((const char *) f->R.rsi, f->R.rdx); 	// 콘솔에 쓴다.
 			f->R.rax = f->R.rdx;						// write()의 반환값을 “출력한 바이트 수”로 설정.
 		}else{
-			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
 			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
 			while(1){ 								
 				if(cur_fd_elem != list_end(&curr->fd_list)){ //fd_list가 끝날때까지
@@ -143,6 +141,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 				}
 			}
 		}
+		break;
 	case SYS_READ:
 		//파일 읽기
 		size = 0; //읽은 버퍼 사이즈
@@ -157,7 +156,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			}
 			f->R.rax = size;
 		}else{
-			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
 			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
 			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
 				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
@@ -170,6 +168,20 @@ syscall_handler (struct intr_frame *f UNUSED) {
 				}
 			}
 		}
+		break;
+	case SYS_FILESIZE:
+			//파일 크기 bytefh 표현하기
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					f->R.rax = file_length (cur_FDS_elem->file); 		//파일 크기 반환
+					break;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem = list_next(cur_fd_elem);
+				}
+			}
+
 		break;	
 	// __attribute__
 	// thread_exit ();	
