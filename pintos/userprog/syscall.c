@@ -9,7 +9,7 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h" //filesys
 #include "threads/malloc.h"
-
+#include "userprog/process.c"
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -90,26 +90,32 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		struct file *file = filesys_open(f->R.rdi);//open 시킴
 
 		//만약 파일을 못열거나 해서 NULL을 받으면
-		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
-			free(elem);
-			elem = NULL;
-		}
-		
-		if(list_empty(&curr->fd_list)){//만약 없으면 True
-			FID = 2; //없으면 초기값 2
-		}
-		else{//만약 비어있지 않다면 마지막+1 로 추가!
-			struct list_elem *back = list_back(&curr->fd_list);	
-			struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
-			FID = FID_e->FID; //맨뒤 elem 의 FID +1 하기
-			FID +=1;
-		}
-
-		if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
+		if (file != NULL){ //open 성공
+			if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
+				if(list_empty(&curr->fd_list)){//만약 없으면 True
+					FID = 2; //없으면 초기값 2
+				}
+				else{//만약 비어있지 않다면 마지막+1 로 추가!
+				struct list_elem *back = list_back(&curr->fd_list);	
+				struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
+				FID = FID_e->FID; //맨뒤 elem 의 FID +1 하기
+				FID +=1;
+				}
 			elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
 			elem->FID = FID; //2부터 시작해서 넣기
 			list_push_back(&curr->fd_list,&elem->elem);
+			}
+			else{//말록 실패할때
+				free(elem); //힙에 만들어진 공간 풀기
+				elem = NULL; //포인터 NULL 가리키게
+				file_close(file);//파일 열었으니 닫아버리기
+			}
+		}
 
+		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
+			free(elem);
+			elem = NULL;
+			file_close(file); 
 		}
 		//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
 		//여기다가 list 연동? 아니면 open 에 연동?
