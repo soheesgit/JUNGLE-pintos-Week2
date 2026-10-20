@@ -98,7 +98,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		list_push_back(&curr->fd_list,&elem->elem);
 		struct list_elem *back = list_back(&curr->fd_list);	
 		struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
-		FID_e->FID += 1; //맨뒤 elem 의 FID +1 하기
+		FID = FID_e->FID; //맨뒤 elem 의 FID +1 하기
+		FID +=1;
 		}
 		//여기다가 list 연동? 아니면 open 에 연동?
 		break;
