@@ -147,6 +147,34 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = -1;
 		}
 		break;
+	case SYS_READ:
+		//파일 읽기
+		unsigned size = 0; //읽은 버퍼 사이즈
+
+		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
+			char *buffer = f->R.rsi;
+			while(f->R.rdx > size){
+				uint8_t ch = input_getc(); // uint8_t key 반환
+				*buffer = (char)ch;
+				buffer++;
+				size++;
+			}
+			f->R.rax = size;
+		}else{
+			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					size = file_read(cur_FDS_elem->file, f->R.rsi, f->R.rdx);	 //파일 읽기(실제로 읽은 바이트수 반환)
+					f->R.rax = size;
+					break;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem = list_next(cur_fd_elem);
+				}
+			}
+		}
+		break;
 	}
 	
 
