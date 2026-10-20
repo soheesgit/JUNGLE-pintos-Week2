@@ -10,6 +10,9 @@
 #include "filesys/filesys.h" //filesys
 #include "threads/malloc.h"
 #include "userprog/process.h"
+#include "threads/vaddr.h"
+#include "threads/mmu.h"
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -52,57 +55,33 @@ static void exit(uint64_t status){
 }
 
 static uint64_t open(const char *name,struct thread *curr , struct FD_elem *elem , struct file *file){
-		/*
-			지금 문제점
-			1. 파일 이거 어떻게 연동사키지?
-			2. 지금 잘되고 있는건가?
-			3. 리스트에는 들어갈꺼 같은데 ID는 자동인가? 어떻게 할까
-		*/
-
-		if(elem == NULL){//말록 실패할때
-			free(elem); //힙에 만들어진 공간 풀기
-			elem = NULL; //포인터 NULL 가리키게
-			file_close(file);//파일 열었으니 닫아버리기
-			return -1;
+//만약 파일을 못열거나 해서 NULL을 받으면
+if (file != NULL){ //open 성공
+	if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
+		if(list_empty(&curr->fd_list)){//만약 없으면 True
+			FID = 2; //없으면 초기값 2
 		}
-
-		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
-			free(elem);
-			elem = NULL;
-			return -1;
+		else{//만약 비어있지 않다면 마지막+1 로 추가!
+		struct list_elem *back = list_back(&curr->fd_list);	
+		struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
+		FID = FID_e->FID; //맨뒤 elem 의 FID +1 하기
+		FID +=1;
 		}
-
-		//만약 파일을 못열거나 해서 NULL을 받으면
-		if (file != NULL){ //open 성공
-			if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
-				if(list_empty(&curr->fd_list)){//만약 없으면 True
-					FID = 2; //없으면 초기값 2
-				}
-				else{//만약 비어있지 않다면 마지막+1 로 추가!
-				struct list_elem *back = list_back(&curr->fd_list);	
-				struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
-				FID = FID_e->FID; //맨뒤 elem 의 FID +1 하기
-				FID +=1;
-				}
-			elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
-			elem->FID = FID; //2부터 시작해서 넣기
-			list_push_back(&curr->fd_list,&elem->elem);
-			return FID;
-			}
-		}
-
-		
-		//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
-		//여기다가 list 연동? 아니면 open 에 연동?
-
+	elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
+	elem->FID = FID; //2부터 시작해서 넣기
+	list_push_back(&curr->fd_list,&elem->elem);
+	return FID;
+	}
+}
+return -1;
+	//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
+	//여기다가 list 연동? 아니면 open 에 연동?
 }
 
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	
-	//*****여기서 f로 넘어오는 인자들 다 검사하고 넘어가기*******
-
 	// 레지스터의 rax값에 요청되는 상태를 저장한다.
 	switch (f->R.rax)
 	{
@@ -140,17 +119,28 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_HALT: //핀토스 off 시키기
 		power_off();
 		break;
+	case SYS_CLOSE:
+		break;
 	case SYS_OPEN:
+		{
 		struct thread *curr = thread_current();
-		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
-		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
-		struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
-		if(is_user_vaddr(f->R.rdi))return -1; //만약 없다면
-		if(pml4_get_page(curr->pml4,f->R.rdi)==NULL){ //메모리 주소가 올바르지 않다면
-			return -1;
+		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
+			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
+				exit(-1); //잘못된 주소면 프로세스 종료
+			}
+			if(*p == '\0') break;
 		}
-		if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
-			uint64_t FID_re = open(&f->R.rdi,curr,elem,file);
+		if(is_user_vaddr(f->R.rdi)&&pml4_get_page(curr->pml4,f->R.rdi)!=NULL){
+			struct FD_elem *elem = malloc(sizeof(struct FD_elem));
+			//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+			struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
+			if(file == NULL || elem == NULL) {   
+				if(file != NULL) file_close(file); 
+				free(elem);                        
+				f->R.rax = -1;
+			}
+			if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
+			uint64_t FID_re = open((const char *)f->R.rdi,curr,elem,file);
 			f->R.rax = FID_re;
 		}
 		else{
@@ -195,6 +185,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// __attribute__
 	// thread_exit ();
 }
+		break;      
+		}          
+	}              
+}                   
 // exit을 하면 -> msg가 떠야함. 
 // 그 다음에 프로세스 exit 을 호출하는 코드를 해야함.
 // 그렇게 두줄이 들어가는 코드를 만들어러ㅏㅏ.
