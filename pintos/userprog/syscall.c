@@ -51,19 +51,13 @@ static void exit(uint64_t status){
 	thread_exit();
 }
 
-static int open(const char *name){
+static int open(const char *name,struct thread *curr , struct FD_elem *elem , struct file *file){
 		/*
 			지금 문제점
 			1. 파일 이거 어떻게 연동사키지?
 			2. 지금 잘되고 있는건가?
 			3. 리스트에는 들어갈꺼 같은데 ID는 자동인가? 어떻게 할까
 		*/
-	
-		struct thread *curr = thread_current();
-
-		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
-		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
-		struct file *file = filesys_open(name);//open 시킴
 
 		//만약 파일을 못열거나 해서 NULL을 받으면
 		if (file != NULL){ //open 성공
@@ -124,8 +118,22 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		power_off();
 		break;
 	case SYS_OPEN:
-		int FID_re = open(f->R.rdi);
-		f->R.rax = FID_re;
+		struct thread *curr = thread_current();
+		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
+		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+		struct file *file = filesys_open(f->R.rdi);//open 시킴
+		if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
+			int FID_re = open(f->R.rdi,curr,elem,file);
+			f->R.rax = FID_re;
+		}
+		else{
+			if(file != NULL) file_close(file);
+			if(elem != NULL) {
+				free(elem); //힙에 만들어진 공간 풀기
+				elem = NULL;
+			}
+			f->R.rax = -1;
+		}
 		break;
 	}
 	
