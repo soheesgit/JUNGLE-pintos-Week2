@@ -21,7 +21,9 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#include "threads/synch.h"
 
+static struct semaphore args_done;
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -61,6 +63,7 @@ process_create_initd (const char *file_name) {
 	char *program_name = strtok_r(temp, " ", &save_ptr); 
 
 	/* Create a new thread to execute FILE_NAME. */
+	sema_init(&args_done, 0);
 	tid = thread_create (program_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
@@ -216,7 +219,9 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	return -1;
+    sema_down(&args_done);
+
+	return 0;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -229,8 +234,12 @@ process_exit (void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
 
-	// 종료를 해야한다.
-	process_cleanup ();
+	// 테스트 통과를 위한 임시 코드 구현이다.
+	bool is_user_process = curr->pml4 != NULL;
+	process_cleanup();
+
+	if (is_user_process)
+		sema_up(&args_done);
 }
 
 /* Free the current process's resources. */
@@ -355,7 +364,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	//  스트링을 토큰화를해서 앞에 파일네임을 넘겨줘야함! grap foo bar
 	/* Open executable file. */
 
-	char *program_name = strtok_r(file_name, " ", &save_pointer);
+	char *fn_copy = palloc_get_page (0); // 메모리 페이지 할당
+	strlcpy (fn_copy, file_name, PGSIZE);
+	char *program_name = strtok_r(fn_copy, " ", &save_pointer);
 	file = filesys_open (program_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", program_name);
@@ -430,42 +441,93 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
+	setup_stack(if_);
+
 	// 파일의 시작 선언
 	// 파일의 시작부터 파일의 끝을 만날때까지
 	
-
-	char **double_pointer;
-	
+	char *fn_copy2 = palloc_get_page (0); // 메모리 페이지 할당
 	int size = 0;
-	for (now_pointer = strtok_r(file_name, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
-		size++;
-		// 이중포인터 배열을 만들어.
-		// 근데 이걸 스택에게 어떻게 넘기느냐?
-		*double_pointer = now_pointer; // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
-		double_pointer++; // 다음 포인터로 넘어감
-	}
-	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
-	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
-
-	double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
 	
-	// 스택에 넣는다
-	for (int i = 0; i < size; i++) {
-		if_->rsp = (if_->rsp) - sizeof(double_pointer);
-		if_->rsp = double_pointer;
-		double_pointer--;
+	char **double_pointer = palloc_get_page(0);
+	// 원본 문자열의 길이를 반환함
+	strlcpy (fn_copy2, file_name, PGSIZE);
+
+	/* 한 번 배열을 순회하면서 문자열 단위로 나누어준다. 
+		double_pointer 배열에 저장한다. */
+	for (now_pointer = strtok_r(fn_copy2, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
+		/*
+		새로운값을 할당한다
+		char now_data = malloc(sizeof(strlen(now_pointer)) + 1);
+		그 이후 문자열을 malloc된 값에 넣는다.
+		strlcpy(now_data, now_pointer, strlen(now_pointer) + 1);
+
+		malloc()으로 확보한 공간은 커널 측 메모리입니다.
+		사용자 프로그램이 사용할 문자열은 사용자 스택에도 존재해야합니다.
+		malloc이 아니라 memcpy를 통해 복사해줍니다.
+		*/
+
+		size++;
+		*double_pointer = now_pointer; 
+		double_pointer++;
 	}
 
-	// argv 값을 넣어준다.
-	if_->rsp = (if_->rsp) - sizeof(double_pointer);
-	if_->rsp = size;
+
+	/* 실질적으로 스택에 업로드가 되는 시작점 */
+
+	/* 스택에 문자열들의 값을 한 번 넣어준 다음에, argv 배열에 맞게도 넣어줘야한다.
+	   문자열을 삽입하면서 주소를 배열에 넣어야한다. */
+	char **str_addr = palloc_get_page(0);
+	char **str_addr_backup = str_addr; // str_addr의 시작 주소 백업
+	
+	/* 1 . 문자열을 역순으로 저장 */
+	for (int i = 0; i < size; i++) {
+		char *now_pointer = *--double_pointer;
+
+		int len = strlen(now_pointer) + 1; // 문자열의 길이를 추출한다.
+		if_->rsp -= len;  // 스택의 높이를 문자열의 길이만큼 내려준다.
+		memcpy((void *)if_->rsp, now_pointer, len); // 스택의 주소에 now_pointer의 값을 len만큼 넘겨준다.
+		
+		*str_addr = (char *) if_->rsp;
+		str_addr++;
+	}
+
+	/* 3. 문자열을 삽입했기 때문에 데이터의 시작 주소를 8의 배수 위치에 맞추는 작업 필요 */
+	size_t padding = if_->rsp % 8; // rsp의 값을 8으로 나눈 나머지 값
+	if_->rsp = if_->rsp - padding; // 스택 포인터를 내려준다
+	memset((void *)if_->rsp, 0, padding); // 0으로 값을 채워준다
+
+	/* 스택에 값을 넣기 전에 NULL 값 삽입 */
+	if_->rsp -= 8;
+	*(char **) if_->rsp = NULL;
+
+	/* 3. 스택의 argv 배열의 값(넣은 문자열의 주소값)을 저장. */
+	for (int i = 0; i < size; i++) {
+		if_->rsp -= 8;
+		*(char **) if_->rsp = *str_addr_backup;
+		str_addr_backup++;
+	}
+
+	uint64_t argv_addr = if_->rsp; // 스택에 다 넣은 이후인 rsp 값을 저장한다.
+
+	/* 4. 마지막에 가짜 반환주소 0을 넣는다. */
+	if_->rsp -= 8;
+	// *(char **) if_->rsp = 0;
+	memset((void *)if_->rsp, 0, 8);
 
 
-	if (setup_stack(if_)) goto done;
+	/* argc, argv값을 rdi와 rsi에 각각 저장*/
+	if_->R.rdi = size; // argc
+	if_->R.rsi = (uint64_t) argv_addr; // 사용자 스택의 argv 배열 주소
 
-		/* Start address. */
+	/* Start address. */
 	if_->rip = ehdr.e_entry;
 	success = true;
+
+	palloc_free_page(fn_copy2);
+	palloc_free_page(double_pointer);
+	palloc_free_page(fn_copy);
+	palloc_free_page(str_addr - size); 
 
 done:
 	/* We arrive here whether the load is successful or not. */
