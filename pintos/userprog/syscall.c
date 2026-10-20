@@ -122,7 +122,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CLOSE:
 		break;
 	case SYS_OPEN:
-		{
 		struct thread *curr = thread_current();
 		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
 			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
@@ -142,6 +141,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
 			uint64_t FID_re = open((const char *)f->R.rdi,curr,elem,file);
 			f->R.rax = FID_re;
+			}
 		}
 		else{
 			if(file != NULL) file_close(file);
@@ -180,15 +180,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			}
 		}
 		break;
-	}
+	
 
 	// __attribute__
 	// thread_exit ();
-}
-		break;      
-		}          
-	}              
-}                   
+	}	       
+}    
 // exit을 하면 -> msg가 떠야함. 
 // 그 다음에 프로세스 exit 을 호출하는 코드를 해야함.
 // 그렇게 두줄이 들어가는 코드를 만들어러ㅏㅏ.
