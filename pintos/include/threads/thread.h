@@ -98,13 +98,14 @@ struct thread {
 	struct lock *waiting_lock; /* 현재 기다리는 Lock 참조 */
 	struct list donations; /* 기부자 목록 관리 */
 	struct list_elem donate_elem; /* 기부자 목록용 list_elem ★ 기부용 list_elem을 만든 이유는 한 스레드가 동시에 락 대기목록/우선순위 기부목록에 저장되어야 하기 때문이다 */
-
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;     
 	
 	//FD 열고있는 파일
 	struct list fd_list;/* List element. */
 
+	//FD 열고있는 파일
+	struct list fd_list;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

@@ -7,11 +7,9 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-
 #include "filesys/filesys.h" //filesys
 #include "threads/malloc.h"
 #include "userprog/process.h"
-
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -21,7 +19,6 @@ struct FD_elem{ //FD_list 안에 들어갈 정보들
    struct list_elem elem;
 };
 uint64_t FID; //open 할때 사용할 FID 번호
-
 
 /* System call.
  *
@@ -94,12 +91,11 @@ static uint64_t open(const char *name,struct thread *curr , struct FD_elem *elem
 			}
 		}
 
-
+		
 		//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
 		//여기다가 list 연동? 아니면 open 에 연동?
 
 }
-
 
 /* The main system call interface */
 void
@@ -114,7 +110,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// (int fd // rdx, const void *buffer // rsi, unsigned size)
 		// f->R.rsi; 이게 배열의 시작주소이다.
 		// f->R.rdx 이게 출력할 바이트 수
-
 		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
 		if(f->R.rdi == 1){
 			putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
@@ -126,18 +121,21 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
+		break;	
+	case SYS_HALT: //핀토스 off 시키기
+		power_off();
 		break;
 	case SYS_OPEN:
 		struct thread *curr = thread_current();
 		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
 		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
 		struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
-		if(!is_user_vaddr(f->R.rdi))return -1; //만약 없다면 
+		if(is_user_vaddr(f->R.rdi))return -1; //만약 없다면
 		if(pml4_get_page(curr->pml4,f->R.rdi)==NULL){ //메모리 주소가 올바르지 않다면
 			return -1;
 		}
 		if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
-			uint64_t FID_re = open(f->R.rdi,curr,elem,file);
+			uint64_t FID_re = open(&f->R.rdi,curr,elem,file);
 			f->R.rax = FID_re;
 		}
 		else{
@@ -149,35 +147,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = -1;
 		}
 		break;
-	case SYS_READ:
-		//파일 읽기
-		unsigned size = 0; //읽은 버퍼 사이즈
-
-		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
-			char *buffer = f->R.rsi;
-			while(f->R.rdx > size){
-				uint8_t ch = input_getc(); // uint8_t key 반환
-				*buffer = (char)ch;
-				buffer++;
-				size++;
-			}
-			f->R.rax = size;
-		}else{
-			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
-			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
-			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
-				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
-				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
-					size = file_read(cur_FDS_elem->file, f->R.rsi, f->R.rdx);	 //파일 읽기(실제로 읽은 바이트수 반환)
-					f->R.rax = size;
-					break;
-				}else{ 				 //다르면 다음 fd 읽음
-				cur_fd_elem = list_next(cur_fd_elem);
-				}
-			}
-		}
-		break;
 	}
+	
+
 	// __attribute__
 	// thread_exit ();
 }
