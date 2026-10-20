@@ -125,12 +125,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
 		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
 		struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
-		if(!is_user_vaddr(f->R.rdi))return -1; //만약 없다면 
+		if(is_user_vaddr(f->R.rdi))return -1; //만약 없다면
 		if(pml4_get_page(curr->pml4,f->R.rdi)==NULL){ //메모리 주소가 올바르지 않다면
 			return -1;
 		}
 		if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
-			uint64_t FID_re = open(f->R.rdi,curr,elem,file);
+			uint64_t FID_re = open(&f->R.rdi,curr,elem,file);
 			f->R.rax = FID_re;
 		}
 		else{
