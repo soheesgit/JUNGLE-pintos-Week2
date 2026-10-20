@@ -22,6 +22,9 @@
 #include "vm/vm.h"
 #endif
 
+
+#define ARGS_MAX 30
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -354,12 +357,22 @@ load (const char *file_name, struct intr_frame *if_) {
 	//  스트링을 토큰화를해서 앞에 파일네임을 넘겨줘야함! grap foo bar
 	/* Open executable file. */
 
-	char *program_name = strtok_r(file_name, " ", &save_pointer);
+	char *fn_copy1 = palloc_get_page(0); 	//fncopy 공간 생성 문자열 크기만큼
+	if(fn_copy1 == NULL){							//fn_copy1가 NULL이면 끝냄
+		goto done;
+	}
+	memcpy (fn_copy1, file_name, strlen(file_name)+1);		//fn_copy1에 문자열 삽입
+			
+	char *program_name = strtok_r(fn_copy1, " ", &save_pointer);
+	
+
 	file = filesys_open (program_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", program_name);
+		palloc_free_page(fn_copy1);
 		goto done;
 	}
+	palloc_free_page(fn_copy1);
 
 	/* Read and verify executable header. */
 	// 파일, 메모리 주소, 바이트 수를 통해서 읽어온다.
@@ -431,43 +444,59 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	// 파일의 시작 선언
 	// 파일의 시작부터 파일의 끝을 만날때까지
-	if (setup_stack(if_)) goto done;
+	// 초기 스택 메모리 준비
+	if (!setup_stack(if_)) goto done;
 
-	char **double_pointer;
-	char *fn_copy2 = palloc_get_page (0);
-	int *size =	malloc(sizeof(int *));
-	*size = 0;
-
-	strlcpy (fn_copy2, file_name, PGSIZE);
-	for (now_pointer = strtok_r(fn_copy2, " ", &save_pointer); now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) {
-		
-		*double_pointer = malloc(sizeof(*now_pointer)); // 이중포인터에 지금 포인터 넣어줌. 지금 단어의 시작점을 넣어주는느낌
-		strlcpy (*double_pointer, now_pointer, sizeof(*now_pointer));
-		double_pointer++; // 다음 포인터로 넘어감
-		*size++;
-	}
-	/*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
-	즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
-
-	double_pointer--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
+	char *argv[ARGS_MAX];
+	int size = 0;
 	
-	// 스택에 넣는다
-	for (int i = 0; i < size; i++) {
-		if_->rsp = (if_->rsp) - sizeof(double_pointer);
-		*(char **)if_->rsp = double_pointer; 
-		double_pointer--;
+
+	char *fn_copy2 = palloc_get_page(0); 	//fncopy 공간 생성 문자열 크기만큼
+	if(fn_copy2 == NULL){							//fn_copy2가 NULL이면 끝냄
+		goto done;
 	}
-	double_pointer++;
-	//double_pointer는 처음것을 가리키고 잇음
+	memcpy (fn_copy2, file_name, strlen(file_name)+1);			//fn_copy2에 문자열 삽입
+	
 
-	// argv 값을 넣어준다.
-	if_->rsp = (if_->rsp) - sizeof(sizeof(int *));
-	*(int *)if_->rsp = size; //size걊을 마지막에 써줌
+	//fn_copy2 파싱하기
+	//파싱한거 now_pointer로 받음 각 문자열의 첫문자 주소를 받음
+	for (now_pointer = strtok_r(fn_copy2, " ", &save_pointer);now_pointer != NULL; now_pointer = strtok_r(NULL, " ", &save_pointer)) { 	
+	if_->rsp = (if_->rsp) - (strlen(now_pointer)+1);			//rsp내림
+	memcpy((char *)if_->rsp, now_pointer, strlen(now_pointer)+1);		//rsp에 문자열 쌓고
+	argv[size] = (char *)if_->rsp;							 //ex) argv[0] = "grep\0" 배열에 문자열 넣기
+	if(size >= ARGS_MAX-2){
+		size++;
+		break;
+	}
+	size++;
+	}
+	argv[size] = NULL;  	//배열의 마지막을 NULL로 만듬
+	
+	if(if_->rsp % 8 != 0){
+		if_->rsp = if_->rsp - (if_->rsp %8);			//rsp주소 8의 배수로 맞춤
+	}
+				
+
+	// /*. 첫 번째 단어는 프로그램 이름이고, 두 번째 단어는 첫 번째 인수이며, 이런 식으로 이어집니다. 
+	// 즉, process_exsec("grep foo bar")는 두 개의 인수인 foo와 bar를 전달하여 grep을 실행해야 합니다.*/
+
+	// argv--; // 마지막 더블포인터는 가비지 공간을 가리키기 때문에 -1을 통해서 마지막 인자값을 가리키도록 한다.
+	
+	// // 스택에 넣는다
+	for (int i = size; i >= 0; i--) {							//NULL값을 넣어줘야해서 1번 더 돈다.
+		if_->rsp = (if_->rsp) - 8;								// 포인터 크기만큼 rsp낮춤
+		*(char **)if_->rsp = argv[i];							// rsp에 문자열 주소 쌓기(역순으로)
+	}
+	int argc = size;
+	*(int *)if_->rsp = 0;
 
 
-		/* Start address. */
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp; //
+	/* Start address. */
 	if_->rip = ehdr.e_entry; //다음에 실행해야할 명령어 위치
 	success = true;
+	palloc_free_page(fn_copy2);
 
 done:
 	/* We arrive here whether the load is successful or not. */
