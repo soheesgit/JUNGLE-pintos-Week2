@@ -96,9 +96,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
 		elem->FID = FID; //2부터 시작해서 넣기
 		list_push_back(&curr->fd_list,&elem->elem);
-		struct list *back = list_back(&curr->fd_list);	
-		FID = list_entry(&elem->elem,struct FD_elem,elem);
-		FID += 1;
+		struct list_elem *back = list_back(&curr->fd_list);	
+		struct FD_elem *FID_e = list_entry(back,struct FD_elem,elem);//가장 맨 뒤 FID 찾기
+		FID_e->FID += 1; //맨뒤 elem 의 FID +1 하기
 		}
 		//여기다가 list 연동? 아니면 open 에 연동?
 		break;

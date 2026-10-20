@@ -89,11 +89,6 @@ struct list_elem {
 	struct list_elem *next;     /* Next list element. */
 };
 
-struct FD_elem{
-   int FID;
-   
-}
-
 /* List. */
 struct list {
 	struct list_elem head;      /* List head. */
