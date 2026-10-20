@@ -51,31 +51,7 @@ static void exit(uint64_t status){
 	thread_exit();
 }
 
-/* The main system call interface */
-void
-syscall_handler (struct intr_frame *f UNUSED) {
-	
-	// 레지스터의 rax값에 요청되는 상태를 저장한다.
-	switch (f->R.rax)
-	{
-	case SYS_WRITE:
-		// (int fd // rdx, const void *buffer // rsi, unsigned size)
-		// f->R.rsi; 이게 배열의 시작주소이다.
-		// f->R.rdx 이게 출력할 바이트 수
-
-		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
-
-		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
-		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
-		break;
-	case SYS_EXIT:
-	// 	종료
-		exit(f->R.rdi);
-		break;	
-	case SYS_HALT: //핀토스 off 시키기
-		power_off();
-		break;
-	case SYS_OPEN:
+static int open(const char *name){
 		/*
 			지금 문제점
 			1. 파일 이거 어떻게 연동사키지?
@@ -87,7 +63,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
 		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
-		struct file *file = filesys_open(f->R.rdi);//open 시킴
+		struct file *file = filesys_open(name);//open 시킴
 
 		//만약 파일을 못열거나 해서 NULL을 받으면
 		if (file != NULL){ //open 성공
@@ -104,21 +80,52 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
 			elem->FID = FID; //2부터 시작해서 넣기
 			list_push_back(&curr->fd_list,&elem->elem);
+
 			}
 			else{//말록 실패할때
 				free(elem); //힙에 만들어진 공간 풀기
 				elem = NULL; //포인터 NULL 가리키게
 				file_close(file);//파일 열었으니 닫아버리기
+				return -1;
 			}
 		}
 
 		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
 			free(elem);
 			elem = NULL;
-			file_close(file); 
+			return -1;
 		}
 		//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
 		//여기다가 list 연동? 아니면 open 에 연동?
+		return FID;
+}
+
+/* The main system call interface */
+void
+syscall_handler (struct intr_frame *f UNUSED) {
+	
+	// 레지스터의 rax값에 요청되는 상태를 저장한다.
+	switch (f->R.rax)
+	{
+	case SYS_WRITE:
+		// (int fd // rdx, const void *buffer // rsi, unsigned size)
+		// f->R.rsi; 이게 배열의 시작주소이다.
+		// f->R.rdx 이게 출력할 바이트 수
+		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
+
+		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
+		break;
+	case SYS_EXIT:
+	// 	종료
+		exit(f->R.rdi);
+		break;	
+	case SYS_HALT: //핀토스 off 시키기
+		power_off();
+		break;
+	case SYS_OPEN:
+		int FID_re = open(f->R.rdi);
+		f->R.rax = FID_re;
 		break;
 	}
 	
