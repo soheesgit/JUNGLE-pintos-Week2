@@ -94,7 +94,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
 		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
 		break;
-	case SYS_EXIT:
+
+	case SYS_FORK:
+		// 현재 프로세스의 '이름'(첫번째 인자값)을 복제하고 new process의 아이디를 리턴하는 함수 사용
+		f->R.rax = process_fork((const char *) f->R.rdi, f);
+		break;
+		case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
 		break;	
@@ -137,26 +142,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 핸들러 발생! 그러면 어떻게해야되냐??
 
 	/*
-	1. 유저모드에서 커널모드로 가고싶은 것. 그러면 커널모드로 전환. 권한UP 
-	-> 호출자의 레지스터에는 핸들러로 전달되는 struct intr_frame을 통해 접근할 수 있습니다. 이 구조체는 커널 스택에 있습니다.
-	-> 커널 모드로 바꿔주기.
 	
-	
-	2. 시스템 콜 번호 확인 
-		-> 시스템 콜을 요청하면 읽기/쓰기 처럼 요청. 그러면 유저모드와 커널모드 사이에서 정수값으로 판단.
-		-> process.c 파일에서 수정. 왜냐면 load에서 커널모드로 해서 불러오기를 해야하지않나?
-
-	-> process_exec()를 여기서 호출.
-	process_exec()의 일!
-		3. 인자 값 처리
-			-> process_Exec에서 하지 않을까요? 잘모름.
-		4. 해당 기능 수행 (ex. 파일 쓰기)
-			-> 파일 읽기를 목표로.
-		5. 반환 값 설정
-			-> RAX 설정. 레지스터 설정할때 RAX에 결과를 넣는다.
-			->  intr_frame -> gp_registers-> rax 에 값을 넣기.
-
-	process_exec() 끝.
-	6. 다시 사용자 모드로 복귀
+	register uint64_t *num asm ("rax") = (uint64_t *) num_;
+	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
+	register uint64_t *a2 asm ("rsi") = (uint64_t *) a2_;
+	register uint64_t *a3 asm ("rdx") = (uint64_t *) a3_;
+	register uint64_t *a4 asm ("r10") = (uint64_t *) a4_;
+	register uint64_t *a5 asm ("r8") = (uint64_t *) a5_;
+	register uint64_t *a6 asm ("r9") = (uint64_t *) a6_;
 
 	*/

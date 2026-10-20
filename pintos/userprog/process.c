@@ -91,26 +91,34 @@ initd (void *f_name) {
  * TID_ERROR if the thread cannot be created. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* Clone current thread to new thread.*/
-	// thread_create를 하면 tid(thread id를 리턴. pid로 사용)
+
+	/* 새로운 자식 쓰레드를 만들고 부모 노드와 연결한다. 
+	thread_create를 하면 tid(thread id를 리턴. pid로 사용) */
 
 	struct thread *parent_thread = thread_current();
 	parent_thread->fork_if = *if_;
 
+	/* 부모는 자식의 복제 성공 여부를 확인한 뒤 fork()에서 반환해야 한다.
+	*
+	* 자식이 먼저 sema_up()을 해도 신호가 남으므로 부모는 대기 없이 통과한다.
+	* 복제 실패 시에도 부모를 깨워야 하며, 자식 생성 자체가 실패하면 기다리지 않는다.
+	* 이 세마포어는 복제 완료용이며, wait()의 자식 종료 대기와는 별개다.
+	*/
+	sema_init(&parent_thread->sema_fork, 0);
+	
 	tid_t child_id = thread_create (name,
 			PRI_DEFAULT, __do_fork, parent_thread);
 
-	// 자식의 정보값을 담을 구조체 생성.
-	struct child_info *child = malloc(sizeof *child);
-	/* pid 값 저장*/
-	child->pid = child_id;
-	
-	/* 초기화 */
-	child->exit_status = -1;
-	child->exited = false;
+	/* 자식이 만들어지지 않았다면 기다리지 않음. */
+	if (child_id == TID_ERROR)
+		return TID_ERROR;
 
-	// 부모의 값에 존재하는 children 배열에 추가
-	list_push_back(&thread_current()->children_pid, &child->elem);
+	/* 자식이 만들어졌으니 복제 결과를 기다림. */
+	sema_down(&parent_thread->sema_fork);
+
+	if (!parent_thread->fork_success)
+		return TID_ERROR;
+
 
 	return child_id;
 }
@@ -123,10 +131,12 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct thread *parent = (struct thread *) aux;
 	void *parent_page;
-	void *newpage;
+	void *new_page;
 	bool writable;
 
 	/* 1. TODO: 부모의 페이지가 커널 페이지라면 즉시 반환한다. */
+	if (is_kernel_vaddr(va))
+    	return true;
 
 	/* 2. 부모의 최상위 페이지 테이블(PML4)에서
 	 *    가상 주소 VA에 매핑된 페이지를 찾는다. */
@@ -134,15 +144,23 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 3. TODO: 자식을 위한 새 페이지를 PAL_USER 플래그로 할당하고,
 	 *    TODO: 그 결과를 NEWPAGE에 저장한다. */
+	new_page = palloc_get_page (PAL_USER);
 
 	/* 4. TODO: 부모 페이지의 내용을 새 페이지에 복사한다.
 	 *    TODO: 부모 페이지가 쓰기 가능한지 확인하고,
 	 *    TODO: 그 결과에 따라 WRITABLE을 설정한다. */
+	if (new_page == NULL) {
+		return false;
+	}
+	memcpy(new_page, parent_page, PGSIZE);
 
 	/* 5. 자식의 페이지 테이블에서 가상 주소 VA에 새 페이지를 매핑한다.
 	 *    쓰기 권한은 WRITABLE 값에 따라 설정한다. */
-	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
+	writable = is_writable(pte);
+	if (!pml4_set_page (current->pml4, va, new_page, writable)) {
 		/* 6. TODO: 페이지 매핑에 실패하면 오류를 처리한다. */
+		palloc_free_page(new_page);
+    	return false;
 	}
 	return true;
 }
@@ -155,16 +173,24 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  */
 static void
 __do_fork (void *aux) {
-	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
-	struct thread *current = thread_current ();
-	/* TODO: 어떻게든 parent_if를 전달해야 한다. (즉, process_fork()의 if_를 전달해야 한다.) */
-	struct intr_frame *parent_if;
+	struct intr_frame if_; // 자식이 사용할 CPU 실행 문맥
+	struct thread *parent = (struct thread *) aux; // 부모 프로세스의 thread 포인터
+	struct thread *current = thread_current (); // 자식 스레드의 포인터
+
+	
+	/* 어떻게든 parent_if를 전달해야 한다. (즉, process_fork()의 if_를 전달해야 한다.)
+		-> 해결하기 위해 parent의 thread 값 안에 fork_if 구조체를 추가해주었다.*/
+	struct intr_frame *parent_if = &parent->fork_if; // 부모의 CPU 문맥 
 	bool succ = true;
+	parent->fork_success = false;
 
 	/* 1. 로컬 스택의 cpu 문맥을 읽어라 */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
+	/* R.rax는 함수의 반환값을 저장한다.
+	만약 자식이 본인의 pid 값을 조회하면 0을 반환해야한다. */
+	if_.R.rax = 0;	 
+	
 	/* 2. 페이지 테이블 복사 */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -187,12 +213,39 @@ __do_fork (void *aux) {
  * TODO: 부모 프로세스의 자원을 성공적으로 복제할 때까지
  *       부모 프로세스가 fork()에서 반환되어서는 안 된다는 점에 유의하세요.*/
 
+ /* 지금 목표인 기본 테스트는 파일을 열지 않으니, 
+	우선 실행 문맥 복사 → 메모리 복제 → 부모에게 성공·실패 알리기까지 구현 */
+	
+
 	process_init ();
 
+	/* 부모의 배열에 자식의 값을 넣어준다. */
+
+	// 자식의 정보값을 담을 구조체 생성.
+	struct child_info *child = malloc(sizeof *child);
+
+	/* 초기화 */
+	child->exit_status = -1;
+	child->exited = false;
+
+	sema_init(&child->exit_done, 0);
+
+	/* pid 값 저장*/
+	child->pid = current->tid;
+	current->as_child = child;
+		
+	// 부모의 값에 존재하는 children 배열에 추가
+	list_push_back(&parent->children_pid, &child->elem);
+	
 	/* Finally, switch to the newly created process. */
-	if (succ)
-		do_iret (&if_);
+
+	parent->fork_success = true;
+	sema_up(&parent->sema_fork);
+
+	do_iret (&if_);
 error:
+	parent->fork_success = false;
+	sema_up(&parent->sema_fork);
 	thread_exit ();
 }
 
