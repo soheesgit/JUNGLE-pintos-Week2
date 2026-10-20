@@ -7,9 +7,17 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h" //filesys
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+struct FD_elem{ //FD_list 안에 들어갈 정보들
+   int FID;
+   struct file *file;
+   struct list_elem elem;
+};
+
 
 /* System call.
  *
@@ -41,9 +49,6 @@ static void exit(uint64_t status){
 	printf("%s: exit(%d)\n", status);
 	process_exit();
 }
-static void open(const char *name){
-
-}
 
 /* The main system call interface */
 void
@@ -69,7 +74,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		power_off();
 		break;
 	case SYS_OPEN:
-		open();
+		/*
+			지금 문제점
+			1. 파일 이거 어떻게 연동사키지?
+			2. 지금 잘되고 있는건가?
+			3. 리스트에는 들어갈꺼 같은데 ID는 자동인가? 어떻게 할까
+		*/
+		struct thread *curr = thread_current();
+		struct FD_elem elem;
+		bool sysNULL = filesys_open(f->rsp);//open 시킴
+		static uint64_t FID = 2; //2부터 시작
+		//만약 파일을 못열거나 해서 NULL을 받으면
+		if (sysNULL == NULL){
+			break;
+		}
+		elem.file = sysNULL; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
+		elem.FID = FID; //2부터 시작해서 넣기
+		list_push_back(&curr->fd_list,&elem.elem);
+		FID +=1 ;
+		//여기다가 list 연동? 아니면 open 에 연동?
 		break;
 	}
 	
