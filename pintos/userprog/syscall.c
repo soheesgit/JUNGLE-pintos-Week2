@@ -9,16 +9,16 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h" //filesys
 #include "threads/malloc.h"
-#include "userprog/process.c"
+#include "userprog/process.h"
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 struct FD_elem{ //FD_list 안에 들어갈 정보들
-   int FID;
+   uint64_t FID;
    struct file *file;
    struct list_elem elem;
 };
-int FID; //open 할때 사용할 FID 번호
+uint64_t FID; //open 할때 사용할 FID 번호
 
 /* System call.
  *
@@ -51,7 +51,7 @@ static void exit(uint64_t status){
 	thread_exit();
 }
 
-static int open(const char *name,struct thread *curr , struct FD_elem *elem , struct file *file){
+static uint64_t open(const char *name,struct thread *curr , struct FD_elem *elem , struct file *file){
 		/*
 			지금 문제점
 			1. 파일 이거 어떻게 연동사키지?
@@ -121,9 +121,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		struct thread *curr = thread_current();
 		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
 		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
-		struct file *file = filesys_open(f->R.rdi);//open 시킴
+		struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
 		if(file!=NULL && elem!=NULL){ //만약 file 이랑 말록 잘 되면
-			int FID_re = open(f->R.rdi,curr,elem,file);
+			uint64_t FID_re = open(f->R.rdi,curr,elem,file);
 			f->R.rax = FID_re;
 		}
 		else{

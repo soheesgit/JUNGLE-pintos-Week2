@@ -108,10 +108,6 @@ remove (const char *file) {
 
 int
 open (const char *file) {
-	// static int fd_num = 2; //fd 넘버 배열하기 | 한번만 실행함
-	struct thread *curr = thread_current(); //현재 스레드
-	
-	//기능
 	return syscall1 (SYS_OPEN, file);
 }
 
