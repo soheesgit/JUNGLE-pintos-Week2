@@ -85,6 +85,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 레지스터의 rax값에 요청되는 상태를 저장한다.
 	switch (f->R.rax)
 	{
+	case SYS_CREATE:
+		f->R.rax = filesys_create(f->R.rdi,f->R.rsi);
+	break;
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
@@ -103,7 +106,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 		if(is_user_vaddr(f->R.rdi)&&pml4_get_page(curr->pml4,f->R.rdi)!=NULL){
 			struct FD_elem *elem = malloc(sizeof(struct FD_elem));
-			//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+			//그냥 하면 덮어씌우니까 별개로 만들어야 함
+			//별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
 			struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
 			if(file == NULL || elem == NULL) {   
 				if(file != NULL) file_close(file); 
