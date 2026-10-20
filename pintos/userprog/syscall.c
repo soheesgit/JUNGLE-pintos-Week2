@@ -7,9 +7,18 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h" //filesys
+#include "threads/malloc.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+struct FD_elem{ //FD_list 안에 들어갈 정보들
+   int FID;
+   struct file *file;
+   struct list_elem elem;
+};
+int FID = 2; //open 할때 사용할 FID 번호
 
 /* System call.
  *
@@ -46,6 +55,8 @@ static void exit(uint64_t status){
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	
+	//*****여기서 f로 넘어오는 인자들 다 검사하고 넘어가기*******
+
 	// 레지스터의 rax값에 요청되는 상태를 저장한다.
 	switch (f->R.rax)
 	{
@@ -55,14 +66,72 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// f->R.rdx 이게 출력할 바이트 수
 
 		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
-
-		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+		if(f->R.rdi == 1){
+			putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+		}
+		//실제 쓴 바이트수가 아닌 그냥 size를 반환
 		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
+		
 		break;
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
-		break;	
+		break;
+	case SYS_OPEN:
+		/*
+			지금 문제점
+			1. 파일 이거 어떻게 연동사키지?
+			2. 지금 잘되고 있는건가?
+			3. 리스트에는 들어갈꺼 같은데 ID는 자동인가? 어떻게 할까
+		*/
+		struct thread *curr = thread_current();
+		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
+		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+		struct file *file = filesys_open(f->R.rdi);//open 시킴
+
+		//만약 파일을 못열거나 해서 NULL을 받으면
+		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
+			free(elem);
+			elem = NULL;
+		}
+		if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
+		elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
+		elem->FID = FID; //2부터 시작해서 넣기
+		list_push_back(&curr->fd_list,&elem->elem);
+		struct list *back = list_back(&curr->fd_list);	
+		FID = list_entry(&elem->elem,struct FD_elem,elem);
+		FID += 1;
+		}
+		//여기다가 list 연동? 아니면 open 에 연동?
+		break;
+	case SYS_READ:
+		//파일 읽기
+		unsigned size = 0; //읽은 버퍼 사이즈
+
+		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
+			char *buffer = f->R.rsi;
+			while(f->R.rdx > size){
+				uint8_t ch = input_getc(); // uint8_t key 반환
+				*buffer = (char)ch;
+				buffer++;
+				size++;
+			}
+			f->R.rax = size;
+		}else{
+			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					size = file_read(cur_FDS_elem->file, f->R.rsi, f->R.rdx);	 //파일 읽기(실제로 읽은 바이트수 반환)
+					f->R.rax = size;
+					break;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem = list_next(cur_fd_elem);
+				}
+			}
+		}
+		break;
 	}
 
 	// __attribute__
