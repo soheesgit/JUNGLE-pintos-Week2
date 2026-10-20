@@ -8,6 +8,7 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h" //filesys
+#include "threads/malloc.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -17,7 +18,7 @@ struct FD_elem{ //FD_list 안에 들어갈 정보들
    struct file *file;
    struct list_elem elem;
 };
-
+int FID = 2; //open 할때 사용할 FID 번호
 
 /* System call.
  *
@@ -82,17 +83,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			3. 리스트에는 들어갈꺼 같은데 ID는 자동인가? 어떻게 할까
 		*/
 		struct thread *curr = thread_current();
-		struct FD_elem elem;
-		bool sysNULL = filesys_open(f->rsp);//open 시킴
-		static uint64_t FID = 2; //2부터 시작
+		struct FD_elem *elem = malloc(sizeof(struct FD_elem));
+		//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+		struct file *file = filesys_open(f->R.rdi);//open 시킴
+		
 		//만약 파일을 못열거나 해서 NULL을 받으면
-		if (sysNULL == NULL){
-			break;
+		if (file == NULL){//만약 실패하면 이미 할당한걸 지워버려야함
+			free(elem);
+			elem = NULL;
 		}
-		elem.file = sysNULL; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
-		elem.FID = FID; //2부터 시작해서 넣기
-		list_push_back(&curr->fd_list,&elem.elem);
-		FID +=1 ;
+		if(elem !=NULL){ //말록이 NULL을 반환할수도 있음 
+		elem->file = file; //보니까 retuen 할때 잘 되면 file을 리턴하고 안되면 NULL을 리턴시키네
+		elem->FID = FID; //2부터 시작해서 넣기
+		list_push_back(&curr->fd_list,&elem->elem);
+		struct list *back = list_back(&curr->fd_list);	
+		FID = list_entry(&elem->elem,struct FD_elem,elem);
+		FID += 1;
+		}
 		//여기다가 list 연동? 아니면 open 에 연동?
 		break;
 	}
