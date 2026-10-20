@@ -109,12 +109,13 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-
+	
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
+	
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -194,6 +195,7 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	/* 스레드 초기화 */
 	init_thread (t, name, priority);
+	list_init (&t->fd_list);
 	/*
 			thread 구조체 초기화
 				tid_t tid = 1 (첫 호출 = 1, 호출할 때마다 +1씩 증가)

@@ -14,7 +14,7 @@ struct file {
  * and returns the new file.  Returns a null pointer if an
  * allocation fails or if INODE is null. */
 struct file *
-file_open (struct inode *inode) {
+file_open (struct inode *inode) { //파일을 여는 역할
 	struct file *file = calloc (1, sizeof *file);
 	if (inode != NULL && file != NULL) {
 		file->inode = inode;
