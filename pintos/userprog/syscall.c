@@ -107,16 +107,31 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	switch (f->R.rax)
 	{
 	case SYS_WRITE:
-		// (int fd // rdx, const void *buffer // rsi, unsigned size)
-		// f->R.rsi; 이게 배열의 시작주소이다.
-		// f->R.rdx 이게 출력할 바이트 수
 		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
+		unsigned size = 0; //쓴 버퍼 사이즈
+
 		if(f->R.rdi == 1){
-			putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
+			putbuf((const char *) f->R.rsi, f->R.rdx); 	// 콘솔에 쓴다.
+			f->R.rax = f->R.rdx;						// write()의 반환값을 “출력한 바이트 수”로 설정.
+		}else{
+			struct thread *curr = thread_current();						//나의 쓰레드 가져오기
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(1){ 								
+				if(cur_fd_elem != list_end(&curr->fd_list)){ //fd_list가 끝날때까지
+					struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+					if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+						size = file_write(cur_FDS_elem->file, f->R.rsi, f->R.rdx);
+						f->R.rax = size;
+						break;
+					}else{ 				 //다르면 다음 fd 읽음
+					cur_fd_elem = list_next(cur_fd_elem);
+					}
+				}else{ 					//fd_list 끝에 도달하면
+					f->R.rax = -1;		//-1 반환
+					break;
+				}
+			}
 		}
-		//실제 쓴 바이트수가 아닌 그냥 size를 반환
-		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
-		
 		break;
 	case SYS_EXIT:
 	// 	종료
@@ -149,7 +164,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_READ:
 		//파일 읽기
-		unsigned size = 0; //읽은 버퍼 사이즈
+		size = 0; //읽은 버퍼 사이즈
 
 		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
 			char *buffer = f->R.rsi;
@@ -176,7 +191,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 		break;
 	}
-	
 
 	// __attribute__
 	// thread_exit ();
