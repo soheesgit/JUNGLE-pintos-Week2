@@ -14,6 +14,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
@@ -22,8 +23,9 @@
 #include "vm/vm.h"
 #endif
 #include "threads/synch.h"
+#include "userprog/syscall.h" // FD_elem 정의
+#include "list.h"
 
-static struct semaphore args_done;
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -63,7 +65,6 @@ process_create_initd (const char *file_name) {
 	char *program_name = strtok_r(temp, " ", &save_ptr); 
 
 	/* Create a new thread to execute FILE_NAME. */
-	sema_init(&args_done, 0);
 	tid = thread_create (program_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
@@ -216,27 +217,25 @@ __do_fork (void *aux) {
  /* 지금 목표인 기본 테스트는 파일을 열지 않으니, 
 	우선 실행 문맥 복사 → 메모리 복제 → 부모에게 성공·실패 알리기까지 구현 */
 	
+	/* 파일 객체 복사 */
+	struct list_elem *parent_fd_elem = list_begin(&parent->fd_list); // 부모 fd_list 의 시작을 가져옴
+	while (parent_fd_elem != list_end(&parent->fd_list)) {
+		struct FD_elem *parent_FDS_elem = list_entry(parent_fd_elem, struct FD_elem, elem); // fd_elem의 FD struct 가져오기
 
+		struct FD_elem *now_fd = malloc(sizeof *now_fd);
+
+		now_fd->FID = parent_FDS_elem->FID;
+		now_fd->file = file_duplicate(parent_FDS_elem->file); 
+		
+		list_push_back(&current->fd_list, &now_fd->elem); // 파일 객체를 복사해서 자식 프로세스의 FD list에 넣어준다.
+		parent_fd_elem = list_next(parent_fd_elem); 
+	}
+									
 	process_init ();
 
 	/* 부모의 배열에 자식의 값을 넣어준다. */
 
-	// 자식의 정보값을 담을 구조체 생성.
-	struct child_info *child = malloc(sizeof *child);
 
-	/* 초기화 */
-	child->exit_status = -1;
-	child->exited = false;
-
-	sema_init(&child->exit_done, 0);
-
-	/* pid 값 저장*/
-	child->pid = current->tid;
-	current->as_child = child;
-		
-	// 부모의 값에 존재하는 children 배열에 추가
-	list_push_back(&parent->children_pid, &child->elem);
-	
 	/* Finally, switch to the newly created process. */
 
 	parent->fork_success = true;
@@ -291,12 +290,36 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-    sema_down(&args_done);
+	/* XXX: 힌트) process_wait(initd)가 실행되면 Pintos가 종료됩니다.
+     * XXX:       따라서 process_wait를 구현하기 전까지는
+     * XXX:       이곳에 무한 루프를 추가하는 것을 권장합니다. */
 
-	return 0;
+	struct thread *curr = thread_current();
+
+	int result = -1; // 리턴할 결과값. 해당 프로세스가 child_pid에 없거나 종료 상태를 이미 회수한 상태, 자식이 종료했다면 01 반ㅇ환 
+
+	// 나의 대기열 배열에 child_tid 자식 프로세스가 있는지 확인
+	struct list_elem *child_elem = list_begin(&curr->children_pid); // 내 child_pid의 시작을 가져옴
+	while (child_elem != list_end(&curr->children_pid)) {
+		struct child_info *child = list_entry(child_elem, struct child_info, elem); // child_info 가져오기
+		
+		// 내 자식이라면, 기다림 실행
+		if (child->pid == child_tid) {
+			sema_down(&child->exit_done); // 자식과 공유하는 sema를 통해 기다린다. 이러면 자식의 신호를 받을 수 있다.
+
+			// block에서 해제되어야 이 코드가 실행된다.
+			result = child->exit_status; // 실행 해제 코드를 저장한다.
+			list_remove(child_elem);
+			free(child);
+			return result;
+		} 
+		else {
+			child_elem = list_next(child_elem);
+		}
+	} 
+	
+	// 자식이 없었다면? -1 반환
+	return result;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -308,13 +331,12 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
-
-	// 테스트 통과를 위한 임시 코드 구현이다.
-	bool is_user_process = curr->pml4 != NULL;
+	// 자식이 종료될 때의 로직 작성
 	process_cleanup();
 
-	if (is_user_process)
-		sema_up(&args_done);
+	
+	if (curr->as_child != NULL)
+		sema_up(&curr->as_child->exit_done);
 }
 
 /* Free the current process's resources. */

@@ -17,11 +17,6 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
-struct FD_elem{ //FD_list 안에 들어갈 정보들
-   uint64_t FID;
-   struct file *file;
-   struct list_elem elem;
-};
 uint64_t FID; //open 할때 사용할 FID 번호
 
 /* System call.
@@ -51,6 +46,8 @@ syscall_init (void) {
 }
 
 static void exit(uint64_t status){
+	if (thread_current() -> as_child != NULL) thread_current() -> as_child -> exit_status = status;
+
 	printf("%s: exit(%d)\n", thread_current() -> name, (int) status);
 	thread_exit();
 }
@@ -141,6 +138,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT: // 0아닌 값 오류 발생 how?
 	// 	종료
 		exit(f->R.rdi);
+		break;
+	case SYS_FORK:
+		// 현재 프로세스의 '이름'(첫번째 인자값)을 복제하고 new process의 아이디를 리턴하는 함수 사용
+		f->R.rax = process_fork((const char *) f->R.rdi, f);
+		break;
+	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
 		break;	
 	case SYS_HALT: //핀토스 off 시키기
 		power_off();
