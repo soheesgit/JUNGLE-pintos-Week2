@@ -78,6 +78,16 @@ return -1;
 	//여기다가 list 연동? 아니면 open 에 연동?
 }
 void
+bad_file_check(struct intr_frame *f, struct thread *curr){
+	for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
+		if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
+			exit(-1); //잘못된 주소면 프로세스 종료
+		}
+		if(*p == '\0') break;
+	}
+}
+
+void
 bad_ptr_check(struct intr_frame *f, struct thread *curr){
 /* bad_ptr 검사 */
 	const char *p = (const char *)f->R.rsi;
@@ -130,6 +140,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	switch (f->R.rax)
 	{
 	case SYS_CREATE:
+		bad_file_check(f, curr);
+
 		if (f->R.rdi != NULL){
 			f->R.rax = filesys_create((const char *)f->R.rdi,f->R.rsi);
 		}
