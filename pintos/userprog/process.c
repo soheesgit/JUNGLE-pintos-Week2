@@ -14,6 +14,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
@@ -22,6 +23,8 @@
 #include "vm/vm.h"
 #endif
 #include "threads/synch.h"
+#include "userprog/syscall.h" // FD_elem 정의
+#include "list.h"
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
@@ -214,7 +217,20 @@ __do_fork (void *aux) {
  /* 지금 목표인 기본 테스트는 파일을 열지 않으니, 
 	우선 실행 문맥 복사 → 메모리 복제 → 부모에게 성공·실패 알리기까지 구현 */
 	
+	/* 파일 객체 복사 */
+	struct list_elem *parent_fd_elem = list_begin(&parent->fd_list); // 부모 fd_list 의 시작을 가져옴
+	while (parent_fd_elem != list_end(&parent->fd_list)) {
+		struct FD_elem *parent_FDS_elem = list_entry(parent_fd_elem, struct FD_elem, elem); // fd_elem의 FD struct 가져오기
 
+		struct FD_elem *now_fd = malloc(sizeof *now_fd);
+
+		now_fd->FID = parent_FDS_elem->FID;
+		now_fd->file = file_duplicate(parent_FDS_elem->file); 
+		
+		list_push_back(&current->fd_list, &now_fd->elem); // 파일 객체를 복사해서 자식 프로세스의 FD list에 넣어준다.
+		parent_fd_elem = list_next(parent_fd_elem); 
+	}
+									
 	process_init ();
 
 	/* 부모의 배열에 자식의 값을 넣어준다. */
