@@ -138,8 +138,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	switch (f->R.rax)
 	{
 	case SYS_CREATE:
-		f->R.rax = filesys_create(f->R.rdi,f->R.rsi);
-	break;
+		if (f->R.rdi != NULL){
+			f->R.rax = filesys_create((const char *)f->R.rdi,f->R.rsi);
+		}
+		if(f->R.rdi == NULL){
+			exit(-1);
+		}
+		break;
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
