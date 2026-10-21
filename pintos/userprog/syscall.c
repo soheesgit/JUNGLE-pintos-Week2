@@ -50,6 +50,8 @@ syscall_init (void) {
 }
 
 static void exit(uint64_t status){
+	if (thread_current() -> as_child != NULL) thread_current() -> as_child -> exit_status = status;
+
 	printf("%s: exit(%d)\n", thread_current() -> name, (int) status);
 	thread_exit();
 }
@@ -91,6 +93,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
+		break;
+	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
 		break;	
 	case SYS_HALT: //핀토스 off 시키기
 		power_off();
