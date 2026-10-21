@@ -77,6 +77,22 @@ return -1;
 	//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
 	//여기다가 list 연동? 아니면 open 에 연동?
 }
+// struct FD_elem *find_fd_elem(struct thread *curr, struct intr_frame *f){ //fd 값에 해당하는 파일 리턴
+// 	struct FD_elem *result_FDS_elem = NULL; //결과 fd_elem
+// 	struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+// 		while(cur_fd_elem != list_end(&curr->fd_list)){ 								 //fd_list가 끝날때까지
+// 			struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+// 			if(cur_FDS_elem->FID == f->R.rdi){ 											// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+// 				result_FDS_elem = cur_FDS_elem;					//결과에 대입
+// 				break;
+// 			}else{ 				 //다르면 다음 fd 읽음
+// 				cur_fd_elem = list_next(cur_fd_elem);
+// 			}
+// 		}
+// 		return result_FDS_elem;
+// }
+	
+
 
 /* The main system call interface */
 void
