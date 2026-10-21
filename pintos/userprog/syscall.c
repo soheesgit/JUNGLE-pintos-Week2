@@ -119,56 +119,7 @@ bad_fd_check(struct intr_frame *f, struct thread *curr, int fd_rw){
 	}
 }
 
-void
-register_check(struct intr_frame *f){
-	switch (f->R.rax)
-	{
-	case SYS_HALT:
-	//핀토스 off 시키기
-		
-	break;
-	case SYS_EXIT:
-	// 	종료
 
-	break;
-	case SYS_FORK:
-
-	break;
-	case SYS_EXEC: //file 유효한지
-
-	break;
-	case SYS_WAIT:
-
-	break;
-	case SYS_CREATE:
-		
-	break;
-	case SYS_REMOVE:
-
-	break;
-	case SYS_OPEN:
-
-	break;
-	case SYS_FILESIZE:
-
-	break;
-	case SYS_READ:
-
-	break;
-	case SYS_WRITE:
-
-	break;
-	case SYS_SEEK:
-
-	break;
-	case SYS_TELL:
-
-	break;
-	case SYS_CLOSE:
-
-	break;
-	}	
-}
 
 /* The main system call interface */
 void
