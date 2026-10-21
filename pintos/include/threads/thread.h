@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -85,6 +86,14 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
+struct child_info {
+    tid_t pid;                 /* 자식 PID */
+    bool exited;               /* 종료 여부 */
+    int exit_status;           /* 종료 상태 */
+    struct semaphore exit_done;  /* 자식 종료 알림용 세마포어 */
+    struct list_elem elem;     /* 리스트 연결 요소 */
+};
+
 struct thread {
 	/* Owned by thread.c. */
 	int64_t wakeup_t;//thread가 깨어날 tick
@@ -115,6 +124,15 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	/* fork()를 위해 자식을 관리하는 필드 추가 */
+	struct list children_pid; 				/* 자식들의 pid 관리 배열 */
+	/* fork 시점의 사용자 실행 문맥을 저장. fork 직후로 들어가서 문맥을 유지해야하기 때문에 필요하다.
+		원본이 바뀌어도 복사해둔 값은 남아있어서 잘 돌아갈 수 있다. */
+	struct intr_frame fork_if;  		
+	struct semaphore sema_fork;				/* fork 와 wait 전용 semaphore 추가 */
+	bool fork_success;						/* fork의 성공 여부를 기록하는 논리형 */
+	struct child_info *as_child;  			/* 부모와 공유하는 나의 정보를 기록 */
 };
 
 /* If false (default), use round-robin scheduler.
