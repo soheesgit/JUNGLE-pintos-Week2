@@ -81,19 +81,13 @@ return -1;
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	
+	struct thread *curr = thread_current();		 //나의 쓰레드 가져오기
 	// 레지스터의 rax값에 요청되는 상태를 저장한다.
 	switch (f->R.rax)
 	{
-	case SYS_WRITE:
-		// (int fd // rdx, const void *buffer // rsi, unsigned size)
-		// f->R.rsi; 이게 배열의 시작주소이다.
-		// f->R.rdx 이게 출력할 바이트 수
-		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
-
-		putbuf((const char *) f->R.rsi, f->R.rdx); // 콘솔에 쓴다.
-		f->R.rax = f->R.rdx; // write()의 반환값을 “출력한 바이트 수”로 설정.
-		break;
+	case SYS_CREATE:
+		f->R.rax = filesys_create(f->R.rdi,f->R.rsi);
+	break;
 	case SYS_EXIT:
 	// 	종료
 		exit(f->R.rdi);
@@ -104,8 +98,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CLOSE:
 		break;
 	case SYS_OPEN:
-		{
-		struct thread *curr = thread_current();
 		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
 			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
 				exit(-1); //잘못된 주소면 프로세스 종료
@@ -114,7 +106,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 		if(is_user_vaddr(f->R.rdi)&&pml4_get_page(curr->pml4,f->R.rdi)!=NULL){
 			struct FD_elem *elem = malloc(sizeof(struct FD_elem));
-			//그냥 하면 덮어씌우니까 별개로 만들어야 하고 별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
+			//그냥 하면 덮어씌우니까 별개로 만들어야 함
+			//별개로 만들기 위해 말록을 통해 힙에 각각의 공간을 할당
 			struct file *file = filesys_open((const char *)f->R.rdi);//open 시킴
 			if(file == NULL || elem == NULL) {   
 				if(file != NULL) file_close(file); 
@@ -126,10 +119,78 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = FID_re;
 			}
 		}
-		break;      
-		}          
+		break;
+	case SYS_WRITE:
+		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
+		unsigned size = 0; //쓴 버퍼 사이즈
+
+		if(f->R.rdi == 1){
+			putbuf((const char *) f->R.rsi, f->R.rdx); 	// 콘솔에 쓴다.
+			f->R.rax = f->R.rdx;						// write()의 반환값을 “출력한 바이트 수”로 설정.
+		}else{
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(1){ 								
+				if(cur_fd_elem != list_end(&curr->fd_list)){ //fd_list가 끝날때까지
+					struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+					if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+						size = file_write(cur_FDS_elem->file, f->R.rsi, f->R.rdx);
+						f->R.rax = size;
+						break;
+					}else{ 				 //다르면 다음 fd 읽음
+					cur_fd_elem = list_next(cur_fd_elem);
+					}
+				}else{ 					//fd_list 끝에 도달하면
+					f->R.rax = -1;		//-1 반환
+					break;
+				}
+			}
+		}
+		break;
+	case SYS_READ:
+		//파일 읽기
+		size = 0; //읽은 버퍼 사이즈
+
+		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
+			char *buffer = f->R.rsi;
+			while(f->R.rdx > size){
+				uint8_t ch = input_getc(); // uint8_t key 반환
+				*buffer = (char)ch;
+				buffer++;
+				size++;
+			}
+			f->R.rax = size;
+		}else{
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					size = file_read(cur_FDS_elem->file, f->R.rsi, f->R.rdx);	 //파일 읽기(실제로 읽은 바이트수 반환)
+					f->R.rax = size;
+					break;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem = list_next(cur_fd_elem);
+				}
+			}
+		}
+		break;
+	case SYS_FILESIZE:
+			//파일 크기 bytefh 표현하기
+			struct list_elem *cur_fd_elem = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					f->R.rax = file_length (cur_FDS_elem->file); 		//파일 크기 반환
+					break;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem = list_next(cur_fd_elem);
+				}
+			}
+
+		break;	
+	// __attribute__
+	// thread_exit ();	
 	}              
-}                   
+}  
 // exit을 하면 -> msg가 떠야함. 
 // 그 다음에 프로세스 exit 을 호출하는 코드를 해야함.
 // 그렇게 두줄이 들어가는 코드를 만들어러ㅏㅏ.
