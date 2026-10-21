@@ -77,6 +77,47 @@ return -1;
 	//if 문 사용해서 FID2가 없다면 2로 저장하고 넣기? 이런식으로 해야할꺼 같은데?
 	//여기다가 list 연동? 아니면 open 에 연동?
 }
+void
+bad_ptr_check(struct intr_frame *f, struct thread *curr){
+/* bad_ptr 검사 */
+	const char *p = (const char *)f->R.rsi;
+	for(int i = 0; i < f->R.rdx ;i++){ //문자열 끝까지 검사
+		/* buffer주소가 user영역인지, 매핑 되었는지 확인 */
+		if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
+			exit(-1);
+			return;
+		}
+		p++;
+	}
+}
+
+void
+bad_fd_check(struct intr_frame *f, struct thread *curr, int fd_rw){
+	/* bad_fd 검사 */
+	int fd_num = f->R.rdi;  //인자로 주어진 fd 정수값
+	if(fd_num != fd_rw){ //표준 출력이 아니고, 양수만 
+		if(fd_num <= 0){
+			f->R.rax = -1;
+			return;
+		}
+	
+		/* fd_list 처음부터 순회 */
+		struct list_elem *cur_fdList_elem = list_begin(&curr->fd_list); //fd_list 처음부터 시작
+		for(cur_fdList_elem; cur_fdList_elem != list_end(&curr->fd_list); cur_fdList_elem = list_next(cur_fdList_elem)){//끝날때까지 순회
+			int list_fd_num = list_entry(cur_fdList_elem, struct FD_elem,elem)->FID; 	//list의 fd 정수값 도출
+			/*찾았을때 예외검증*/
+			if(fd_num == list_fd_num){ //찾았다!
+				break;
+			}
+		}
+		if(cur_fdList_elem == list_end(&curr->fd_list)){ //끝까지 fd파일 못찾으면 예외처리
+			f->R.rax = -1;		//-1 반환
+			return;
+		}
+		/*현재 찾은 상태 */
+		return;
+	}
+}
 
 void
 register_check(struct intr_frame *f){
@@ -84,23 +125,23 @@ register_check(struct intr_frame *f){
 	{
 	case SYS_HALT:
 	//핀토스 off 시키기
-		power_off();
+		
 	break;
 	case SYS_EXIT:
 	// 	종료
-		exit(f->R.rdi);
+
 	break;
 	case SYS_FORK:
 
 	break;
-	case SYS_EXEC:
+	case SYS_EXEC: //file 유효한지
 
 	break;
 	case SYS_WAIT:
 
 	break;
 	case SYS_CREATE:
-		f->R.rax = filesys_create(f->R.rdi,f->R.rsi);
+		
 	break;
 	case SYS_REMOVE:
 
@@ -126,7 +167,6 @@ register_check(struct intr_frame *f){
 	case SYS_CLOSE:
 
 	break;
-
 	}	
 }
 
@@ -145,7 +185,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			exit(-1);
 		}
 		break;
-	case SYS_EXIT:
+	case SYS_EXIT: // 0아닌 값 오류 발생 how?
 	// 	종료
 		exit(f->R.rdi);
 		break;	
@@ -183,8 +223,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_WRITE:
 		// (STDOUT_FILENO = rdi, buf = rsi, strlen (buf) = rdx);
+		bad_ptr_check(f, curr);
+		bad_fd_check(f,curr, 1);
+		
 		unsigned size = 0; //쓴 버퍼 사이즈
-
 		if(f->R.rdi == 1){
 			putbuf((const char *) f->R.rsi, f->R.rdx); 	// 콘솔에 쓴다.
 			f->R.rax = f->R.rdx;						// write()의 반환값을 “출력한 바이트 수”로 설정.
@@ -209,8 +251,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_READ:
 		//파일 읽기
-		size = 0; //읽은 버퍼 사이즈
+		bad_ptr_check(f, curr);
+		bad_fd_check(f,curr, 0);
 
+		size = 0; //읽은 버퍼 사이즈
 		if(f->R.rdi == 0){ //키보드로 받아서 buffer에 저장
 			char *buffer = f->R.rsi;
 			while(f->R.rdx > size){
