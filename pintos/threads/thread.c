@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -109,12 +110,13 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-
+	
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
+	
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -194,6 +196,7 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	/* 스레드 초기화 */
 	init_thread (t, name, priority);
+	list_init (&t->fd_list);
 	/*
 			thread 구조체 초기화
 				tid_t tid = 1 (첫 호출 = 1, 호출할 때마다 +1씩 증가)
@@ -218,6 +221,23 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG; // 코드 세그먼트에 커널용 선택자를 설정
 	t->tf.eflags = FLAG_IF; // 플래그의 인터럽트 허용 비트를 설정
 
+
+	/* 쓰레드를 생성할 때에 child_info 정보까지 연결한다. 
+		현재 thread_current는 부모 프로세스의 스레드고, t는 자식 프로세스의 스레드이다. */
+	// 자식의 정보값을 담을 구조체 생성.
+	struct child_info *child = malloc(sizeof *child);
+
+	/* 초기화 */
+	child->exit_status = -1;
+	child->exited = false;
+	sema_init(&child->exit_done, 0); // 자식 종료 신호가 아직 없으므로 0으로 초기화
+
+	/* pid 값 저장*/
+	child->pid = t->tid;
+	t->as_child = child;
+	// 부모의 값에 존재하는 children 배열에 추가
+	list_push_back(&thread_current()->children_pid, &child->elem);
+
 	/* Add to run queue. */
 	thread_unblock (t); // thread_unblock 함수는 새 스레드 상태를 바꾸기 위해 인터럽트를 끄고 READY로 바꿔 ready-list에 연결한다
 
@@ -236,6 +256,7 @@ thread_create (const char *name, int priority,
 	if(thread_current()->priority < t->priority){
 		thread_yield();
 	}
+
 	return tid;
 }
 
@@ -482,6 +503,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->base_priority = t->priority;
 	t->waiting_lock = NULL;
 	list_init(&t->donations);
+
+	/* PROJECT 2 - 필드 children_pid 초기화 추가 */
+	list_init(&t->children_pid);
+	t->as_child = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
