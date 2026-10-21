@@ -151,10 +151,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_CLOSE:
 		break;
-	case SYS_FORK:
-		// 현재 프로세스의 '이름'(첫번째 인자값)을 복제하고 new process의 아이디를 리턴하는 함수 사용
-		f->R.rax = process_fork((const char *) f->R.rdi, f);
-		break;
 	case SYS_OPEN:
 		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
 			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
