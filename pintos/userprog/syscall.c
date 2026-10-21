@@ -12,6 +12,7 @@
 #include "userprog/process.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -118,6 +119,7 @@ bad_fd_check(struct intr_frame *f, struct thread *curr, int fd_rw){
 		return;
 	}
 }
+
 
 
 
@@ -243,8 +245,28 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			}
 
 		break;	
-	// __attribute__
-	// thread_exit ();	
+	case SYS_SEEK:
+	/*설명
+		파일의 위치 포인터를 옮기는 기능
+		Hello 라는 파일을 읽고있을때 seek(파일,3) 을한다면
+		인덱스 3번 즉 2번째 l부터 시작하게 된다. 즉 0번을 보고있든 4번을 보고있든 무조건 l에서 시작하게 만들어야함
+		그래서 일단 파일을 찾기위해 FID_list 를 찾고 거기에 있는 파일을 가져와서 seek 함
+	*/
+	//오루났던 부분
+	//위에 cur_fd_elem 을 그대로 뜯어와서 같은 변수 이름이 선언됨
+	//해결 _seek 추가
+			struct list_elem *cur_fd_elem_seek = list_begin(&curr->fd_list);	//내 fd_list시작을 가져옴
+			while(cur_fd_elem_seek != list_end(&curr->fd_list)){ 								//fd_list가 끝날때까지
+				struct FD_elem *cur_FDS_elem = list_entry(cur_fd_elem_seek, struct FD_elem,elem); //fd_elem의 FD struct 가져오기
+				if(cur_FDS_elem->FID == f->R.rdi){ 						// fd리스트에 있는 file번호와 인자로 들어온 fd값이 같으면 파일 읽기
+					file_seek (cur_FDS_elem->file,f->R.rsi);
+					return;
+				}else{ 				 //다르면 다음 fd 읽음
+				cur_fd_elem_seek = list_next(cur_fd_elem_seek);
+				}
+			}
+			//만약 FID가 없다면
+			return;
 	}              
 }  
 // exit을 하면 -> msg가 떠야함. 
