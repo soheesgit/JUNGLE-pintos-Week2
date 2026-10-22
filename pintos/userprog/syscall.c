@@ -13,6 +13,8 @@
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
 #include "filesys/file.h"
+#include "threads/palloc.h"
+#include <string.h>
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -267,6 +269,19 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			}
 			//만약 FID가 없다면
 			return;
+	case SYS_EXEC:
+		for(const char *p = (const char *)f->R.rdi; ; p++){ //문자열 끝까지 검사
+			if(!is_user_vaddr(p) || pml4_get_page(curr->pml4, p) == NULL){
+				exit(-1); //잘못된 주소면 프로세스 종료
+			}
+			if(*p == '\0') break;
+		}
+		char *exec_value = palloc_get_page(0);
+		strlcpy(exec_value, f->R.rdi, PGSIZE);
+		int value = process_exec(exec_value);
+		
+		if (value == -1) exit(-1);
+		break;
 	}              
 }  
 // exit을 하면 -> msg가 떠야함. 
